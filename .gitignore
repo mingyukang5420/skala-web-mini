@@ -73,3 +73,13 @@ npm-debug.log
 yarn-error.log
 
 # End of https://www.toptal.com/developers/gitignore/api/macos,visualstudiocode,vue,vuejs
+
+### Gradle / Spring Boot ###
+backend/.gradle/
+backend/build/
+!backend/gradle/wrapper/gradle-wrapper.jar
+
+### 로컬 전용 민감 설정 ###
+.env
+backend/src/main/resources/application-local.yml
+
