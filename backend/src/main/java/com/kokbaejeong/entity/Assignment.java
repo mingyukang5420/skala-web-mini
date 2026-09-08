@@ -1,5 +1,6 @@
 package com.kokbaejeong.entity;
 
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -26,13 +27,17 @@ public class Assignment {
     @JoinColumn(name = "dock_id", nullable = false)
     private Dock dock;
 
+    @Column(nullable = false)
     private String driverName;
 
+    @Column(nullable = false)
     private LocalDateTime scheduledTime;
 
+    @Column(nullable = false)
     private String pinHash;
 
     @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
     private AssignmentStatus status;
 
     @CreationTimestamp
