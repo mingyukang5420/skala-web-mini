@@ -254,3 +254,40 @@ GitHub 정책상 PR 작성자와 리뷰 실행 계정이 동일하면 정식 App
 승인. `main`에 머지 완료 (squash merge, 브랜치 삭제).
 
 비차단 참고사항(존재하지 않는 assignment id의 401 처리는 PR #20의 유사 판단과 같은 패턴으로 문서상 근거는 있으나, 확정 근거는 아니므로 확인 참고용으로 `docs/후속작업.md`에 기록)은 해당 문서에 기록.
+
+## 2026-09-09 - PR #22: feat: Vue 배정/취소 화면 구현
+
+- 이슈: #9 [Feature] Vue 배정 화면 구현
+- 브랜치: `feat/9-vue-assignment-screen` → `main`
+- 근거 문서: `기능명세서.md` REQ-FUNC-001/002/003/004, REQ-NFR-003/005, `설계_참고자료.md`(아키텍처/CORS), `콕배정-API.yml`, `docs/작업계획서.md` §2-4, `docs/후속작업.md`(PR #20 - dock.status 자동 미반영 결정)
+
+### 검토 범위
+- `AssignView.vue`(SCR-ASSIGN-001), `CancelView.vue`(SCR-ASSIGN-002), 라우터 추가, `style.css` 정리
+- `CorsConfig`(신규 `WebMvcConfigurer`), `app.cors.allowed-origins`, `.env.example`/`docker-compose.yml`/`README_DEPLOY.md`
+
+### 블로킹으로 발견되어 같은 PR에서 직접 수정
+`docker-compose.yml`의 `CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS}`(수정 전)은 이 PR 이전 버전의 `.env.example`로 만든 구버전 `.env`(해당 줄 없음)를 쓰는 로컬 환경에서, docker compose가 미정의 변수를 **빈 문자열로 치환**해 컨테이너에 전달함을 직접 재현 확인(`docker compose config` -> `CORS_ALLOWED_ORIGINS: ""`, 경고 로그 동반). Spring의 `${CORS_ALLOWED_ORIGINS:기본값}` 플레이스홀더는 변수가 "존재하되 비어있는" 경우 기본값을 적용하지 않아(완전 부재일 때만 적용) `app.cors.allowed-origins=""` -> `"".split(",")` -> `[""]`가 되고, 실제 컨테이너에 curl로 CORS preflight를 보내 **모든 origin이 403 "Invalid CORS request"로 차단됨**을 확인. 환경변수 자체를 컨테이너에 전달하지 않은 대조군에서는 Spring 기본값이 정상 적용되어 200이 나옴을 함께 확인해, 원인이 docker-compose의 미정의 변수 보간 방식임을 특정. 이 PR이 고치려던 CORS 미설정 문제를 기존 `.env`를 가진 개발자 환경에서 조용히 재발시킬 수 있는 실질적 블로킹 리스크로 판단.
+- 수정: `${CORS_ALLOWED_ORIGINS}` -> `${CORS_ALLOWED_ORIGINS:-http://localhost:5173,http://localhost:3000}`(docker-compose 자체 기본값 문법, Spring 쪽 기본값과 동일하게 맞춤). 같은 스테일 `.env` 시나리오로 재검증 - 컨테이너 env 기본값 적용, CORS preflight 200 정상 확인. 커밋 `eafc47d`로 같은 PR 브랜치에 추가.
+
+### CORS 설정 자체 검토
+- `addCorsMappings("/**")`, `allowedMethods("GET","POST","PUT","DELETE")`, `allowedHeaders("*")` - `콕배정-API.yml` 전체 확인 결과 `DELETE`를 쓰는 엔드포인트는 없음(관리자 비활성화/활성화도 전부 POST). 미사용이나 위험 없는 사소한 군더더기로 판단, 블로킹 아님.
+- `allowCredentials(true)` 미설정 - `api/client.js`에 쿠키/`credentials` 사용 없음, `AdminLoginView.vue`는 아직 placeholder(PR #16은 백엔드 JWT만 구현)라 현재 시점에 쿠키 기반 인증 경로 자체가 없음을 확인. `Authorization: Bearer` 헤더 방식이므로 credentials 모드 불필요하다는 판단이 유효함.
+- CORS를 별도 이슈로 분리하지 않고 이 PR에 포함한 것: 직접 로컬 브라우저 테스트 중 발견됐고 다른 작업을 블로킹하지 않으며 이 화면 자체가 CORS 없이 동작 불가능한 관계라 타당하다고 판단. "13개 이슈 중 CORS 전용 이슈가 없었던 것은 기획 단계의 누락"이라는 점은 `docs/후속작업.md`에 별도 기록.
+
+### 독립 UI 검증 (Playwright + 시스템 Chrome, 모바일 뷰포트 390x844)
+`docker compose up -d db` + 백엔드 `bootRun` + 프론트 `npm run dev`(`VITE_API_BASE_URL=http://localhost:8080`, dev server 5173 -> 백엔드 8080 직접 크로스오리진 호출)로 전체 스택을 띄우고 실제 브라우저로 조작:
+- `/w/1` 진입 - 창고명 + 도크 2개(AVAILABLE 1, MAINTENANCE 1) 정상 렌더링, MAINTENANCE 카드 `disabled` 확인, 실제 크로스오리진 fetch 성공으로 CORS 정상 동작 확인
+- AVAILABLE 도크 선택 -> 폼 작성(`datetime-local` 값 `"2026-09-10T14:30"` 그대로 제출, 백엔드 `LocalDateTime` 역직렬화 문제없이 수락 확인) -> 배정 성공(배정 번호 1) + 취소 링크 노출 -> 배정 후에도 도크 목록의 A-01이 여전히 "배정 가능"으로 남아있음을 확인(자동 새로고침 없음, PR #20 기록과 일치, diff 상 숨은 재조회 호출 없음도 확인)
+- 취소 화면 이동 -> 틀린 PIN -> 에러 노출 -> 올바른 PIN -> 취소 성공 메시지
+- 존재하지 않는 창고(`/w/9999`) -> 에러 + "다시 시도" 버튼 -> 클릭 시 실제 재요청(네트워크 요청) 발생 확인 (REQ-NFR-005)
+- 콘솔에는 의도된 401/404 네트워크 로그만 있고 처리되지 않은 예외/Vue 경고 없음
+
+### 빌드/커밋 단위 검증
+- `cd frontend && npm run build`, `cd backend && ./gradlew compileJava --no-daemon` 각각 성공
+- 4개 커밋(스타일 정리 -> 배정 화면 -> 취소 화면 -> CORS) 각각 `git checkout` 후 프론트/백엔드 빌드 개별 성공 확인
+- 검증에 사용한 Postgres 컨테이너/볼륨은 `docker compose down -v`로 완전히 제거, 백엔드/프론트 프로세스 종료, `.env`는 제거, `git status` clean 확인, `main` 브랜치로 복귀
+
+### 최종 판정
+승인. 블로킹으로 발견된 docker-compose 기본값 문제는 같은 PR(`eafc47d`)에서 직접 수정 후 재검증 완료. `main`에 머지 완료 (squash merge, 브랜치 삭제).
+
+비차단 참고사항(CORS 전용 이슈가 원래 13개 이슈 목록에 없었던 기획 단계 누락, `DELETE` 메서드 미사용)은 `docs/후속작업.md`에 기록.
