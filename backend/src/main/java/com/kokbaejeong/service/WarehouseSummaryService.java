@@ -1,6 +1,7 @@
 package com.kokbaejeong.service;
 
 import com.kokbaejeong.dto.WarehouseSummaryResponse;
+import com.kokbaejeong.dto.WarehouseSummaryResponse.DockOccupancy;
 import com.kokbaejeong.entity.AssignmentStatus;
 import com.kokbaejeong.entity.Dock;
 import com.kokbaejeong.exception.BusinessException;
@@ -39,16 +40,23 @@ public class WarehouseSummaryService {
 
         List<Dock> docks = dockRepository.findByWarehouseIdAndDeletedAtIsNull(warehouseId);
         if (docks.isEmpty()) {
-            return new WarehouseSummaryResponse(warehouseId, 0.0, NO_DOCK_MESSAGE);
+            return new WarehouseSummaryResponse(warehouseId, 0.0, NO_DOCK_MESSAGE, List.of());
         }
 
-        long occupiedCount = docks.stream()
-                .filter(dock -> assignmentRepository.existsByDockIdAndStatus(dock.getId(), AssignmentStatus.ACTIVE))
-                .count();
+        List<DockOccupancy> dockOccupancies = docks.stream()
+                .map(dock -> new DockOccupancy(
+                        dock.getId(),
+                        dock.getName(),
+                        dock.getStatus(),
+                        assignmentRepository.existsByDockIdAndStatus(dock.getId(), AssignmentStatus.ACTIVE)
+                ))
+                .toList();
+
+        long occupiedCount = dockOccupancies.stream().filter(DockOccupancy::occupied).count();
         double occupancyRate = (double) occupiedCount / docks.size();
 
         String summary = generateSummary(warehouse.getName(), docks.size(), occupiedCount, occupancyRate);
-        return new WarehouseSummaryResponse(warehouseId, occupancyRate, summary);
+        return new WarehouseSummaryResponse(warehouseId, occupancyRate, summary, dockOccupancies);
     }
 
     private String generateSummary(String warehouseName, int totalDocks, long occupiedCount, double occupancyRate) {
