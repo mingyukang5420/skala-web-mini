@@ -1,8 +1,10 @@
 package com.kokbaejeong.service;
 
+import com.kokbaejeong.dto.AssignmentCancelRequest;
 import com.kokbaejeong.dto.AssignmentCreateRequest;
 import com.kokbaejeong.dto.AssignmentResponse;
 import com.kokbaejeong.entity.Assignment;
+import com.kokbaejeong.entity.AssignmentStatus;
 import com.kokbaejeong.entity.Dock;
 import com.kokbaejeong.entity.DockStatus;
 import com.kokbaejeong.exception.BusinessException;
@@ -52,5 +54,22 @@ public class AssignmentService {
         } catch (DataIntegrityViolationException e) {
             throw new BusinessException(ErrorCode.ASSIGNMENT_CONFLICT);
         }
+    }
+
+    @Transactional
+    public AssignmentResponse cancel(Long id, AssignmentCancelRequest request) {
+        Assignment assignment = assignmentRepository.findById(id)
+                .orElseThrow(() -> new BusinessException(ErrorCode.PIN_MISMATCH));
+
+        if (!passwordEncoder.matches(request.pin(), assignment.getPinHash())) {
+            throw new BusinessException(ErrorCode.PIN_MISMATCH);
+        }
+
+        if (assignment.getStatus() == AssignmentStatus.CANCELLED) {
+            throw new BusinessException(ErrorCode.ALREADY_CANCELLED);
+        }
+
+        assignment.cancel();
+        return AssignmentResponse.from(assignment);
     }
 }
