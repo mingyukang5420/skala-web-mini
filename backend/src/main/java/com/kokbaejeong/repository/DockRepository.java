@@ -8,4 +8,6 @@ import java.util.List;
 public interface DockRepository extends JpaRepository<Dock, Long> {
 
     List<Dock> findByWarehouseId(Long warehouseId);
+
+    List<Dock> findByWarehouseIdAndDeletedAtIsNull(Long warehouseId);
 }
