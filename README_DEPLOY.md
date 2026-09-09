@@ -20,7 +20,7 @@ docker compose up --build
 
 2. **백엔드와 프론트엔드는 각각 별도 서비스로 배포**합니다. 이 저장소의 `backend/Dockerfile`, `frontend/Dockerfile`을 각각 Railway 서비스에 연결하면 됩니다.
 
-3. **프론트엔드의 `VITE_API_BASE_URL`은 빌드 시점에 고정**됩니다. Railway에서 백엔드 서비스의 실제 배포 URL을 확인한 후, 프론트엔드 서비스의 빌드 환경변수로 그 URL을 넣어줘야 합니다. 로컬처럼 nginx 프록시(`/api`)에 의존할 수 없습니다.
+3. **프론트엔드의 `VITE_API_BASE_URL`은 빌드 시점에 고정**됩니다. Railway에서 백엔드 서비스의 실제 배포 URL을 확인한 후, 프론트엔드 서비스의 빌드 환경변수로 그 URL을 넣어줘야 합니다. 로컬처럼 nginx 프록시(`/api`)에 의존할 수 없습니다. 이때 프론트와 백엔드가 서로 다른 도메인이 되므로, 백엔드의 `CORS_ALLOWED_ORIGINS`에 배포된 프론트엔드의 실제 origin을 등록해야 합니다.
 
 4. **환경변수는 Railway 대시보드에서 서비스별로 설정**합니다. `.env` 파일은 로컬 전용이며 Railway에는 올라가지 않습니다.
 
@@ -33,3 +33,4 @@ docker compose up --build
 | OPENAI_API_KEY | 직접 입력 | Railway 백엔드 서비스 환경변수로 등록 |
 | JWT_SECRET | 직접 입력 | Railway 백엔드 서비스 환경변수로 등록 |
 | VITE_API_BASE_URL | 비워둠 (nginx 프록시 사용) | 배포된 백엔드 URL 입력 후 프론트 재빌드 |
+| CORS_ALLOWED_ORIGINS | 기본값(localhost:5173,3000) 사용 | 배포된 프론트엔드 origin으로 교체 |
