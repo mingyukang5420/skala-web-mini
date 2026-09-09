@@ -220,3 +220,37 @@ GitHub 정책상 PR 작성자와 리뷰 실행 계정이 동일하면 정식 App
 승인. `main`에 머지 완료 (squash merge, 브랜치 삭제).
 
 비차단 참고사항(`dock.status` 자동 미전환은 설계_v2의 명시적 결정과 일치하나, Vue 배정 화면 구현 전 재확인 권장)은 `docs/후속작업.md`에 기록.
+
+## 2026-09-09 - PR #21: feat: 배정 취소 API 추가
+
+- 이슈: #8 [Feature] 배정 취소 API
+- 브랜치: `feat/8-assignment-cancel` → `main`
+- 근거 문서: `기능명세서.md` REQ-FUNC-004/REQ-NFR-002, `설계_참고자료.md`(에러코드 표, DTO 표), `콕배정-API.yml`(`/assignments/{id}/cancel`), `02_설계_DB`(설계_v2~v5)
+
+### 검토 범위
+- `AssignmentCancelRequest`(pin, @NotBlank) DTO
+- `AssignmentService.cancel(id, request)`(id 조회 실패 시 PIN_MISMATCH -> PIN 검증 -> ALREADY_CANCELLED 체크 -> `assignment.cancel()`)
+- `AssignmentController`(`POST /assignments/{id}/cancel`)
+
+### 판단이 필요했던 두 가지 결정에 대한 검토
+1. **존재하지 않는 assignment id -> `PIN_MISMATCH`(401)**: `콕배정-API.yml`의 `/assignments/{id}/cancel`은 200/400/401만 정의하고 404가 없음. `설계_참고자료.md`와 `02_설계_DB`의 `설계_v3`/`설계_v4`(둘 다 상태: 확정) 에러코드 표에서도 이 엔드포인트에는 PIN_MISMATCH/ALREADY_CANCELLED 두 개만 있고 NOT_FOUND 계열이 전혀 없음을 확인 - 같은 문서에서 창고/도크 엔드포인트는 WAREHOUSE_NOT_FOUND/DOCK_NOT_FOUND를 명시적으로 갖고 있는 것과 대비되어, cancel 엔드포인트에 404가 없는 것은 누락이 아니라 의도된 설계로 판단됨. PR #20에서 존재하지 않는 dockId를 DOCK_NOT_AVAILABLE(400)로 처리한 것과 동일한 패턴. v1~v5 전체를 확인했으나 반박 근거는 발견되지 않음. PR의 판단이 타당함.
+2. **PIN 검증을 ALREADY_CANCELLED 체크보다 먼저 수행**: `설계_참고자료.md`의 공통 원칙("401은 인증 실패, 403은 인증 후 권한/상태 거부, 400은 요청 자체 문제...")은 코드별 HTTP 상태 분류 기준이지 동일 엔드포인트 내 체크 순서를 규정하지 않아 이 판단과 모순되지 않음. 틀린 PIN으로 배정 상태(취소 여부)를 알아낼 수 없게 하는 순서는 보안 관점에서 합리적.
+
+### 검토 결과 (승인)
+- `AssignmentCancelRequest`(pin @NotBlank)가 `설계_참고자료.md`/`설계_v5` DTO 표와 정확히 일치.
+- `AssignmentService.create()` 로직은 이번 PR에서 전혀 변경되지 않음 - `cancel()` 메서드만 추가된 clean addition으로 확인.
+- PIN 비교는 `PasswordEncoder.matches()`(BCrypt, PR #16에서 정의된 빈)를 재사용 - 평문 비교 없음(REQ-NFR-002 충족), PR #20의 PIN 해시 저장 방식과 일관.
+- 커밋 3개(DTO -> Service -> Controller)를 각각 `git checkout`해 `./gradlew compileJava --no-daemon`으로 개별 빌드 확인 - 3개 전부 독립적으로 컴파일 성공.
+
+### 독립 검증
+- `docker compose up -d db`(POSTGRES_DB/USER/PASSWORD를 커맨드라인 환경변수로 직접 전달)로 Postgres를 띄우고 백엔드를 환경변수로 직접 `bootRun`.
+- 창고 1개, AVAILABLE 도크 1개를 SQL로 시딩 후 `POST /assignments`로 배정 생성(pin=1234, id=1).
+- PR 본문이 주장한 5가지 시나리오를 curl로 전부 재현해 통과 확인: 틀린 PIN 401 PIN_MISMATCH / 올바른 PIN 200 CANCELLED / 재취소 400 ALREADY_CANCELLED / 없는 id(999) 401 PIN_MISMATCH / 취소 후 같은 도크에 새 배정 201 ACTIVE(부분 유니크 인덱스가 CANCELLED는 막지 않음을 재확인, PR #20 동작 훼손 없음).
+- DB 직접 조회로 `pin_hash`가 BCrypt 형식(`$2a$10$...`)임과 `cancelled_at`이 취소 시점에 채워짐을 확인.
+- `./gradlew compileJava --no-daemon` 빌드 성공 확인.
+- 검증에 사용한 Postgres 컨테이너/볼륨은 `docker compose down -v`로 완전히 제거, 백엔드 프로세스 종료, `.env`는 생성하지 않음, `git status` clean 확인, `main` 브랜치로 복귀.
+
+### 최종 판정
+승인. `main`에 머지 완료 (squash merge, 브랜치 삭제).
+
+비차단 참고사항(존재하지 않는 assignment id의 401 처리는 PR #20의 유사 판단과 같은 패턴으로 문서상 근거는 있으나, 확정 근거는 아니므로 확인 참고용으로 `docs/후속작업.md`에 기록)은 해당 문서에 기록.
