@@ -371,3 +371,34 @@ GitHub 정책상 PR 작성자와 리뷰 실행 계정이 동일하면 정식 App
 승인. `main`에 머지 완료 (squash merge, 브랜치 삭제).
 
 비차단 참고사항(LLM 호출 실패 시 `RuntimeException` 캐치 범위가 넓은 점, `existsByDockIdAndStatus` N+1 스타일 쿼리, `WarehouseSummaryService`의 별도 창고 조회, 실제 `OPENAI_API_KEY`로 정상 호출 경로 사전 검증 필요)은 `docs/후속작업.md`에 기록.
+
+## 2026-09-09 - PR #25: chore: 수동 테스트 시나리오 전체 실행 및 결과 기록
+
+- 이슈: #12 [Chore] 수동 테스트 시나리오 전체 실행
+- 브랜치: `chore/12-manual-test-pass` → `main`
+- 근거 문서: `03_개발 컨벤션.html`의 "테스트 전략(수동 시나리오)" 표, `docs/작업계획서.md` §3-3
+
+### 검토 범위
+- `docs/수동테스트결과.md` 신규 추가(문서 전용 PR, `git diff origin/main...HEAD --stat`로 이 파일 1개만 변경됐음을 확인). 이슈 #1~#11이 모두 머지된 `main` 기준으로 6개 시나리오를 하나의 연속 세션에서 재검증했다는 주장을 검증.
+
+### 독립 재현 (문서를 신뢰하지 않고 처음부터 재구성)
+`lsof -ti:8080,5173 | xargs -r kill -9` → `docker compose up -d db` → 백엔드 `bootRun`(`SPRING_DATASOURCE_*`, `OPENAI_API_KEY=sk-dummy`, `JWT_SECRET` 직접 전달) → 프론트 `npm run dev`(`VITE_API_BASE_URL=http://localhost:8080`). 활성 창고(서울1센터, 도크 A1/A2 AVAILABLE), 비활성 창고(비활성창고, 도크 B1), 도크 없는 창고(도크없는창고), 관리자 계정을 `spring-security-crypto`+`spring-jcl` jar와 jshell로 bcrypt 해시 생성 후 직접 시딩.
+
+6개 시나리오 전부 재현, 상태 코드/에러 코드/메시지 문구가 문서와 정확히 일치, 회귀 없음:
+1. **동시 배정 충돌**: A1에 백그라운드 curl 2건 동시 전송 → 201/409 정확히 하나씩, `assignment` 테이블에 ACTIVE 행 정확히 1건(DB 직접 조회로 확인).
+2. **PIN 불일치**: 성공한 배정을 잘못된 PIN으로 취소 → `401 {"code":"PIN_MISMATCH"}`.
+3. **비활성 창고 신규 배정 차단**: 비활성 창고 소속 도크(B1)에 배정 시도 → `403 {"code":"WAREHOUSE_INACTIVE"}`.
+4. **ACTIVE 배정 있는 도크 비활성화 차단**: Playwright(`playwright-core`, 시스템 Chrome, 모바일 뷰포트 390x844)로 관리자 로그인 → A1 비활성화 클릭 → `400 DOCK_HAS_ACTIVE_ASSIGNMENT`, 화면에 "활성 배정이 있는 도크는 비활성화할 수 없습니다." 에러 문구가 실제로 렌더링됨을 스크린샷으로 확인, A1은 "활성" 배지 유지.
+5. **비활성 도크 노출 여부(교차 기능)**: 같은 세션에서 이어서 A2(배정 없음) 비활성화 → 성공 → 방문 기사 화면(`/w/1`) 재조회 → A1만 노출, A2 제외됨을 스크린샷으로 확인. 문서가 "기능 간 상호작용까지 이어서 확인"했다고 주장한 부분이 실제로 재현됨(별도 세션이 아니라 관리자 조작 직후 같은 브라우저 컨텍스트로 검증).
+6. **AI 요약 데이터 없음**: 도크 없는 창고 조회 → `occupancyRate:0.0`, `"등록된 도크가 없어 혼잡도를 계산할 수 없습니다."`, 응답 ~13ms. 비교군(도크 있는 창고)은 ~914ms(더미 키로 실제 OpenAI 호출 시도 후 폴백) - 응답 시간 차이로 LLM 호출 스킵 여부를 간접 확인.
+
+### 문서 정확성 검토
+- 표의 6개 항목이 `03_개발 컨벤션.html`의 "테스트 전략(수동 시나리오)" 표와 1:1 대응됨을 확인.
+- DoD 대조 체크리스트가 "이슈 #1~#11 각 PR 리뷰에서 개별 확인"과 "이번 PR에서 재확인"을 구분해 표기 - 이전 PR에서 검증된 항목을 이번 PR의 성과로 과대 포장하지 않음. `./gradlew compileJava --no-daemon`, `npm run build` 모두 성공해 "빌드가 깨지지 않는다" claim을 별도로 검증.
+- "남은 주의사항" 섹션이 `docs/후속작업.md`의 기존 항목(린터 미도입, 예외 타입 미처리 2건, AI 요약 실제 키 미검증)을 "이번 회귀 테스트 범위 밖"이라고 정확히 표기 - 해결된 것으로 오도하지 않음.
+
+### 독립 검증 환경
+- `docker compose down -v`로 컨테이너/볼륨 제거, 백엔드/프론트 프로세스 종료, 임시 `.env` 생성하지 않음, `git status` clean 확인, `main` 브랜치로 복귀.
+
+### 최종 판정
+승인. `main`에 머지 완료 (squash merge, 브랜치 삭제). 문서 전용 PR이며 코드 드리프트/회귀 없음.
