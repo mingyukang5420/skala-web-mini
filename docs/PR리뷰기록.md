@@ -291,3 +291,41 @@ GitHub 정책상 PR 작성자와 리뷰 실행 계정이 동일하면 정식 App
 승인. 블로킹으로 발견된 docker-compose 기본값 문제는 같은 PR(`eafc47d`)에서 직접 수정 후 재검증 완료. `main`에 머지 완료 (squash merge, 브랜치 삭제).
 
 비차단 참고사항(CORS 전용 이슈가 원래 13개 이슈 목록에 없었던 기획 단계 누락, `DELETE` 메서드 미사용)은 `docs/후속작업.md`에 기록.
+
+## 2026-09-09 - PR #23: feat: 관리자 화면 구현
+
+- 이슈: #10 [Feature] 관리자 화면 구현
+- 브랜치: `feat/10-admin-screens` → `main`
+- 근거 문서: `기능명세서.md` REQ-FUNC-005/006/007, `콕배정-API.yml`(`/admin/login`, `/admin/warehouses`, `/admin/docks` 및 하위 경로), `docs/작업계획서.md` §3-1
+
+### 검토 범위
+- `adminClient.js`(토큰 저장/조회, `adminFetch` 헤더 자동 부착), `AdminLoginView.vue` 실 구현, `AdminWarehouseListView/FormView.vue`, `AdminDockListView/FormView.vue`, 라우터 6개 경로 + `router.beforeEach` 인증 가드
+- `콕배정-API.yml` 스키마(`AdminLoginRequest`, `TokenResponse`, `WarehouseCreateRequest`/`WarehouseAdminResponse`, `DockCreateRequest`/`DockUpdateRequest`/`DockAdminResponse`) 대 실제 요청/응답 필드명 전부 대조 - 일치 확인. `GET /admin/docks`의 필수 `warehouseId` 쿼리 파라미터도 정확히 반영됨.
+
+### 번들된 버그 수정 2건 독립 검증
+1. **`JwtAuthenticationFilter`가 `OPTIONS` 요청을 인증 검사 없이 통과시키도록 수정**: curl로 직접 재현 - `OPTIONS /admin/warehouses`(Authorization 헤더 없음, CORS preflight 헤더 포함)는 200 + `Access-Control-*` 헤더만 반환하고 `Content-Length: 0`으로 실제 데이터가 없음을 확인. 같은 조건에서 `GET`/`POST`는 여전히 401 `AUTH_FAILED`로 막힘을 확인. 미인증 `POST /admin/warehouses`로 창고 생성을 시도한 뒤 DB를 직접 조회해 실제로 레코드가 생성되지 않았음을 확인. `JwtAuthenticationFilter`는 `FilterRegistrationBean`으로 등록된 순수 서블릿 필터이고, CORS는 `WebMvcConfigurer`(`CorsConfig`) 기반이라 `DispatcherServlet`의 `HandlerMapping` 단계에서 처리되므로, OPTIONS를 필터에서 통과시켜도 실제 컨트롤러 메서드(POST/PUT/GET 핸들러)가 호출되지 않는 구조임을 코드와 동작 양쪽으로 확인. 보안 홀 없음.
+2. **`api/client.js`의 `apiFetch` 헤더 병합 순서를 `{ ...options, headers: {...} }`로 수정**: 기존 호출부(`AssignView.vue`, `CancelView.vue`) 전부를 확인한 결과 커스텀 헤더를 넘기는 곳이 없어 동작 영향 없음. `adminClient.js`의 `adminFetch`가 넘기는 `{ Authorization, ...options.headers }`가 `apiFetch` 내부에서 `{ 'Content-Type': 'application/json', ...options.headers }`로 다시 병합되어, 기본 `Content-Type`과 호출자가 넘긴 `Authorization`(혹은 명시적으로 재정의한 `Content-Type`)이 모두 살아남는 순서임을 확인.
+
+### 실제 화면 독립 검증 (Playwright + 시스템 Chrome, 모바일 뷰포트 390x844)
+`docker compose up -d db` + 백엔드 `bootRun`(환경변수 직접 전달) + 프론트 `npm run dev`(`VITE_API_BASE_URL=http://localhost:8080`, 5173→8080 직접 크로스오리진)로 전체 스택을 띄우고 bcrypt 해시로 관리자 계정을 직접 시딩 후 실제 브라우저로 전 과정 조작:
+- 로그인 - 틀린 비밀번호 시 에러 문구 노출 및 로그인 화면 유지 확인, 올바른 비밀번호 시 `/admin/warehouses`로 리다이렉트 확인
+- 창고 등록 → 목록 반영 확인, 창고 수정 → 목록에 변경된 이름 반영 확인
+- 도크 관리 진입 → 도크 등록 → 목록 반영, 도크 수정 → 변경된 이름 반영
+- 도크 비활성화 → 배지 "비활성" 전환 확인 → 재활성화 → 배지 "활성" 복귀 확인
+- **ACTIVE 배정이 있는 도크의 비활성화 차단(PR 자체 테스트 목록에는 없던 경로, 별도 검증)**: 방문자 `POST /assignments`로 해당 도크에 ACTIVE 배정을 시딩한 뒤 관리자 화면에서 비활성화를 시도 - 요청이 400으로 거부되고 "활성 배정이 있는 도크는 비활성화할 수 없습니다."라는 `DOCK_HAS_ACTIVE_ASSIGNMENT` 에러 메시지가 화면에 실제로 노출됨을 확인(침묵 실패 아님), 도크는 계속 "활성" 상태로 남음
+- 로그아웃 → 로그인 화면 이동 확인
+- 로그아웃 상태에서 `/admin/warehouses` 직접 URL 접근 → `router.beforeEach` 가드가 `/admin`으로 리다이렉트함을 확인
+- 전 과정 `page.on('console')`/`page.on('pageerror')` 확인 - 의도된 401/400 네트워크 로그 외 처리되지 않은 JS 에러 없음
+
+### 빌드/커밋 단위 검증
+- `frontend: npm run build`, `backend: ./gradlew compileJava --no-daemon` 각각 성공
+- 커밋 7단계(토큰 헬퍼 → 공통 스타일 → 로그인 → 창고 화면 → 도크 화면 → CORS 필터 수정 → 헤더 병합 수정) 순서 확인
+- `v-html` 사용 없음(전체 grep으로 확인), `AssignView.vue`/`CancelView.vue`(PR #22)와 동일한 `<script setup>` Composition API 스타일 일관성 확인
+
+### 독립 검증 환경
+- 검증에 사용한 Postgres 컨테이너/볼륨은 `docker compose down -v`로 완전히 제거, 백엔드/프론트 프로세스 종료, 임시로 만든 `.env`는 삭제, `git status` clean 확인, `main` 브랜치로 복귀
+
+### 최종 판정
+승인. `main`에 머지 완료 (squash merge, 브랜치 삭제).
+
+비차단 참고사항(관리자 수정 폼의 비동기 초기값 로드가 빠른 사용자 입력을 덮어쓸 수 있는 이론적 레이스 컨디션)은 `docs/후속작업.md`에 기록.
