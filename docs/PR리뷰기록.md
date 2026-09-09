@@ -149,3 +149,37 @@ GitHub 정책상 PR 작성자와 리뷰 실행 계정이 동일하면 정식 App
 승인. `main`에 머지 완료 (squash merge, 브랜치 삭제).
 
 비차단 참고사항(필수 쿼리 파라미터 누락 시 응답 포맷이 앱 공통 에러 포맷과 다름)은 `docs/후속작업.md`에 기록.
+
+## 2026-09-09 - PR #19: feat: 방문 기사 창고/도크 조회 API 추가
+
+- 이슈: #6 [Feature] 방문 기사 창고/도크 조회 API
+- 브랜치: `feat/6-visitor-warehouse-dock-query` → `main`
+- 근거 문서: `기능명세서.md` REQ-FUNC-001/002, REQ-NFR-001, `설계_참고자료.md`(DTO 표, 에러코드 표), `콕배정-API.yml`(`/warehouses/{id}`, `/warehouses/{id}/docks`)
+
+### 검토 범위
+- `WarehouseVisitorController`(GET `/warehouses/{id}`, GET `/warehouses/{id}/docks`)
+- `VisitorWarehouseService`(창고 단건 조회, 도크 목록 조회 - 비활성 창고는 둘 다 404)
+- `WarehouseResponse`, `DockResponse` DTO
+- `DockRepository.findByWarehouseIdAndDeletedAtIsNull` 추가
+
+### 검토 결과 (승인)
+- 두 엔드포인트 모두 `콕배정-API.yml`의 경로/메서드/상태코드(200/404)와 정확히 일치.
+- `WarehouseResponse`(id, name), `DockResponse`(id, name, size, status, hasLeveler, hasDockSeal, supportsColdChain, supportsHazmat)가 `설계_참고자료.md` DTO 표와 정확히 일치. 관리자용 DTO의 `active`/`warehouseId` 등 내부 정보가 전혀 노출되지 않음.
+- `VisitorWarehouseService`가 `findActiveWarehouseOrThrow()`를 공유해 창고 단건 조회/도크 목록 조회 양쪽 모두에서 창고가 없거나 비활성(`deleted_at IS NOT NULL`)이면 동일하게 `WAREHOUSE_NOT_FOUND`(404) - 에러코드 표의 "창고 없음/비활성화" 요구사항을 정확히 충족. 관리자용 `WarehouseService`(PR #17)는 의도적으로 이 필터가 없어 재활성화 대상을 볼 수 있는 것과 대비되며, 두 서비스의 차이는 복붙 실수가 아니라 요구사항 차이에 따른 의도된 분리로 확인.
+- 도크 목록은 `findByWarehouseIdAndDeletedAtIsNull`로 도크 자신의 `deleted_at` 기준으로만 필터링 - 창고 비활성화 연쇄가 아니라 도크 자체 소프트 딜리트 기준이라는 API yml 설명과 일치.
+- `JwtAuthenticationFilter`는 `SecurityConfig`에서 `/admin/*` 패턴에만 등록되어 있어 `/warehouses/**`는 별도 코드 없이 자연히 무인증 - 실제 curl로 확인.
+- 별도 `VisitorWarehouseService`로 관리자용 서비스와 분리한 것은 공유 서비스에 `if (isAdmin)` 분기를 넣는 것보다 계층을 깔끔하게 유지하는 선택으로 판단. 생성자 주입, `@Transactional(readOnly = true)` 클래스 레벨 패턴도 기존 서비스들과 일관됨.
+- 커밋 4개(DTO -> Repository 쿼리 -> Service -> Controller)를 각각 checkout해 `./gradlew compileJava --no-daemon`으로 개별 빌드 확인 - 4개 전부 독립적으로 컴파일 성공.
+
+### 독립 검증
+- `docker compose up -d db`(POSTGRES_DB/USER/PASSWORD를 kokbaejeong/kokbaejeong_user/change_me로 커맨드라인 환경변수 직접 전달, `.env` 생성 없음)로 Postgres를 띄우고 백엔드를 환경변수로 직접 `bootRun`.
+- 활성 창고 1개, 비활성 창고 1개(`deleted_at` 설정), 활성 창고 아래 활성 도크 1개 + 비활성 도크 1개를 SQL로 직접 시딩.
+- PR 본문이 주장한 6가지 시나리오를 Authorization 헤더 없이 curl로 전부 재현해 통과 확인: 활성 창고 조회 200, 비활성 창고 조회 404 WAREHOUSE_NOT_FOUND, 없는 창고 조회 404, 활성 창고 도크 목록 200(활성 도크만 노출), 비활성 창고 도크 목록 404, 전 요청 무인증 통과.
+- 도크 목록 응답 시간 6ms 수준으로 REQ-NFR-001(2초 이내) 충족.
+- `./gradlew compileJava --no-daemon` 빌드 성공 확인.
+- 검증에 사용한 Postgres 컨테이너/볼륨은 `docker compose down -v`로 완전히 제거, 백엔드 프로세스 종료, `.env`는 생성하지 않음, `git status` clean 확인.
+
+### 최종 판정
+승인. `main`에 머지 완료 (squash merge, 브랜치 삭제).
+
+비차단 참고사항(비숫자 `{id}` 경로 변수 처리 시 응답 포맷이 앱 공통 에러 포맷과 다름)은 `docs/후속작업.md`에 기록.
