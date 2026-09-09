@@ -183,3 +183,40 @@ GitHub 정책상 PR 작성자와 리뷰 실행 계정이 동일하면 정식 App
 승인. `main`에 머지 완료 (squash merge, 브랜치 삭제).
 
 비차단 참고사항(비숫자 `{id}` 경로 변수 처리 시 응답 포맷이 앱 공통 에러 포맷과 다름)은 `docs/후속작업.md`에 기록.
+
+## 2026-09-09 - PR #20: feat: add dock assignment endpoint
+
+- 이슈: #7 [Feature] 도크 배정 API (동시성 처리)
+- 브랜치: `feat/7-assignment-create` → `main`
+- 근거 문서: `기능명세서.md` REQ-FUNC-003/REQ-NFR-002/REQ-NFR-004, `설계_참고자료.md`(에러코드 표, DTO 표), `콕배정-API.yml`(`/assignments` POST), `콕배정-DB.dbml`(assignment 부분 유니크 인덱스), `01_기획_DB`/`02_설계_DB`(요구사항_정의서_v1~v4, 설계_v1~v5)
+
+### 검토 범위
+- `AssignmentCreateRequest`/`AssignmentResponse` DTO
+- `AssignmentService.create()`(도크 조회 -> 창고 활성 검증 -> 도크 AVAILABLE 검증 -> PIN 해시 -> 저장, `DataIntegrityViolationException` -> `ASSIGNMENT_CONFLICT` 변환)
+- `AssignmentController`(`POST /assignments`)
+
+### 판단이 필요했던 두 가지 결정에 대한 검토
+1. **존재하지 않는 dockId -> `DOCK_NOT_AVAILABLE`(400)**: `콕배정-API.yml`의 `/assignments` POST는 응답으로 201/400/403/409만 정의하고 404가 없으며, 400 설명 자체가 "입력값 오류 또는 도크 사용 불가"로 되어 있어 "도크가 없음"과 "도크를 쓸 수 없음"을 같은 400 버킷으로 묶는 것이 문서상 의도와 일치함. `설계_참고자료.md`/`설계_v3`/`설계_v4` 에러코드 표에도 이 엔드포인트에 404 항목이 없음을 재확인. PR의 판단이 타당함.
+2. **`dock.status`가 배정 생성 시 자동으로 OCCUPIED 전환되지 않음**: 반박 근거를 찾기 위해 `01_기획_DB`/`02_설계_DB`의 v1~v5 버전을 모두 확인함. 오히려 `설계_v2`의 "사용자 결정 사항"에 "도크 상태 갱신 방식: 자동 반영 없음. 배정 실패(409) 응답 수신 시에만 안내 문구로 처리"라는 명시적 결정 문장을 발견 - PR의 구현을 직접 뒷받침하는 근거임. 반박 근거는 발견되지 않음. `docs/후속작업.md`에 프론트 작업 전 재확인 권장 사항으로 기록.
+
+### 검토 결과 (승인)
+- `AssignmentCreateRequest`(dockId @NotNull, driverName @NotBlank, scheduledTime 선택, pin @NotBlank @Pattern 4자리 숫자), `AssignmentResponse`(id, dockId, status)가 `설계_참고자료.md`/`설계_v5` DTO 표와 정확히 일치.
+- PIN은 `PasswordEncoder`(PR #16에서 정의된 BCrypt 빈)로 `encode()`한 해시만 저장, 평문 저장 없음 - REQ-NFR-002 충족.
+- `scheduledTime`이 `null`이면 `LocalDateTime.now()`로 채우는 로직이 `설계_참고자료.md`/`요구사항_정의서_v1`(도착 예정 시각 기본값=현재)와 일치.
+- `assignmentRepository.save()`를 감싼 `DataIntegrityViolationException` 캐치는 도크를 이미 `findById`로 로드해 FK 위반 가능성이 없고, 필수 컬럼은 컨트롤러 레벨 Bean Validation(`@NotNull`/`@NotBlank`)이 먼저 걸러 DB의 not-null 제약에 도달하기 전에 400으로 처리되므로, 실질적으로 이 catch 블록에 도달할 수 있는 유일한 제약은 `assignment(dock_id, status='ACTIVE')` 부분 유니크 인덱스로 판단 - 다른 무결성 오류를 잘못 삼킬 위험은 낮음.
+- 창고 비활성 검증(`WAREHOUSE_INACTIVE`)을 도크 AVAILABLE 검증보다 먼저 수행 - `요구사항_정의서_v4`의 "창고가 비활성화 상태이면 하위 도크의 상태와 무관하게 신규 배정을 거부한다"와 순서까지 일치.
+- 커밋 3개(DTO -> Service -> Controller)를 각각 `git checkout`해 `./gradlew compileJava --no-daemon`으로 개별 빌드 확인 - 3개 전부 독립적으로 컴파일 성공.
+
+### 독립 검증
+- `docker compose up -d db`(POSTGRES_DB/USER/PASSWORD를 kokbaejeong/kokbaejeong_user/change_me로 커맨드라인 환경변수 직접 전달)로 Postgres를 띄우고 백엔드를 환경변수로 직접 `bootRun`.
+- 활성 창고 1개, 비활성 창고 1개, AVAILABLE 도크 2개(1개는 동시성 테스트 전용), MAINTENANCE 도크 1개, 비활성 창고 소속 AVAILABLE 도크 1개를 SQL로 시딩.
+- 순차 시나리오 6종을 curl로 재현해 전부 통과 확인: 정상 배정 201 / 같은 도크 순차 재요청 409 ASSIGNMENT_CONFLICT / MAINTENANCE 도크 400 DOCK_NOT_AVAILABLE / 비활성 창고 도크 403 WAREHOUSE_INACTIVE / 존재하지 않는 dockId 400 DOCK_NOT_AVAILABLE / PIN 형식 오류 400 VALIDATION_ERROR.
+- DB 직접 조회로 `scheduled_time`이 요청 처리 시각과 일치함, `pin_hash`가 BCrypt 형식(`$2a$10$...`)임, 배정 후에도 `dock.status`가 여전히 `AVAILABLE`로 남아있음(자동 전환 없음)을 확인.
+- **동시성 재현(핵심)**: 새 AVAILABLE 도크 1개에 백그라운드 curl 두 건을 `&`+`wait`로 진짜 동시에 전송 - 하나는 201(`{"id":3,"dockId":4,"status":"ACTIVE"}`), 하나는 409 ASSIGNMENT_CONFLICT를 받았고, 이후 DB에서 해당 도크에 대한 ACTIVE 배정이 정확히 1건임을 `SELECT`로 확인.
+- `./gradlew compileJava --no-daemon` 빌드 성공 확인.
+- 검증에 사용한 Postgres 컨테이너/볼륨은 `docker compose down -v`로 완전히 제거, 백엔드 프로세스 종료, `.env`는 생성하지 않음, `git status` clean 확인, `main` 브랜치로 복귀.
+
+### 최종 판정
+승인. `main`에 머지 완료 (squash merge, 브랜치 삭제).
+
+비차단 참고사항(`dock.status` 자동 미전환은 설계_v2의 명시적 결정과 일치하나, Vue 배정 화면 구현 전 재확인 권장)은 `docs/후속작업.md`에 기록.
