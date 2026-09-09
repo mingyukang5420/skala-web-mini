@@ -2,7 +2,9 @@ package com.kokbaejeong.controller;
 
 import com.kokbaejeong.dto.WarehouseAdminResponse;
 import com.kokbaejeong.dto.WarehouseCreateRequest;
+import com.kokbaejeong.dto.WarehouseSummaryResponse;
 import com.kokbaejeong.service.WarehouseService;
+import com.kokbaejeong.service.WarehouseSummaryService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -21,9 +23,11 @@ import java.util.List;
 public class WarehouseAdminController {
 
     private final WarehouseService warehouseService;
+    private final WarehouseSummaryService warehouseSummaryService;
 
-    public WarehouseAdminController(WarehouseService warehouseService) {
+    public WarehouseAdminController(WarehouseService warehouseService, WarehouseSummaryService warehouseSummaryService) {
         this.warehouseService = warehouseService;
+        this.warehouseSummaryService = warehouseSummaryService;
     }
 
     @GetMapping
@@ -54,5 +58,10 @@ public class WarehouseAdminController {
     @PostMapping("/{id}/activate")
     public WarehouseAdminResponse activate(@PathVariable Long id) {
         return warehouseService.activate(id);
+    }
+
+    @GetMapping("/{id}/summary")
+    public WarehouseSummaryResponse getSummary(@PathVariable Long id) {
+        return warehouseSummaryService.getSummary(id);
     }
 }
