@@ -116,3 +116,36 @@ GitHub 정책상 PR 작성자와 리뷰 실행 계정이 동일하면 정식 App
 승인. `main`에 머지 완료 (squash merge, 브랜치 삭제).
 
 비차단 참고사항 없음.
+
+## 2026-09-09 - PR #18: feat: 도크 관리자 CRUD API 추가
+
+- 이슈: #5 [Feature] 도크 관리 CRUD API
+- 브랜치: `feat/5-dock-admin-crud` → `main`
+- 근거 문서: `기능명세서.md` REQ-FUNC-007, `설계_참고자료.md`(DTO 표), `콕배정-API.yml`(`/admin/docks` 전체), `콕배정-DB.dbml`(dock 엔티티)
+
+### 검토 범위
+- `DockAdminController`(GET `/admin/docks?warehouseId=`, POST `/admin/docks`, GET/PUT `/admin/docks/{id}`, POST `/admin/docks/{id}/(de)activate`)
+- `DockService`(창고별 목록/단건조회/등록/수정/활성화/비활성화, ACTIVE 배정 존재 시 비활성화 차단)
+- `DockCreateRequest`, `DockUpdateRequest`, `DockAdminResponse` DTO
+- `DockRepository.findByWarehouseId`, `AssignmentRepository.existsByDockIdAndStatus` 추가
+
+### 검토 결과 (승인)
+- 6개 엔드포인트 모두 `콕배정-API.yml`의 경로/메서드/상태코드(등록 201, 나머지 200/404/400)와 정확히 일치. 목록 조회가 `warehouseId` 쿼리 파라미터를 필수로 받는 것도 yml과 일치.
+- `DockCreateRequest`(warehouseId·name·size·status 필수)/`DockUpdateRequest`(warehouseId 없음)가 `설계_참고자료.md` DTO 표 및 yml 스키마와 정확히 일치 - "소속 창고는 수정 시 변경 불가" 요구사항을 필드 자체를 빼는 방식으로 구현.
+- `DockAdminResponse`가 `콕배정-DB.dbml` dock 테이블의 모든 노출 대상 컬럼(4개 boolean 특성 포함) + `active`(deletedAt IS NULL)까지 빠짐없이 포함.
+- 등록 시 `warehouseId`로 창고를 조회해 없으면 `WAREHOUSE_NOT_FOUND`(404)를 던지는 것은 API yml에 명시된 케이스는 아니지만, 이 체크가 없으면 FK 제약 위반이 원시 500으로 새어나가는 것을 막는 합리적인 방어 코드로 판단 - 기존 `ErrorCode`를 재사용했을 뿐 신규 코드 추가 없음.
+- `assignmentRepository.existsByDockIdAndStatus(id, ACTIVE)`로 ACTIVE 배정만 비활성화를 막고 CANCELLED는 걸리지 않음을 코드와 실제 요청으로 확인.
+- `getByWarehouse()`/`getById()`가 `deletedAt` 기준 필터링을 하지 않아 비활성 도크도 목록/단건 조회에 그대로 노출됨 - "비활성화 포함" 스펙 및 재활성화 대상을 관리자가 볼 수 있어야 하는 요구를 충족.
+- `@Transactional(readOnly = true)` 클래스 레벨 + 쓰기 메서드 오버라이드, 생성자 주입 스타일이 `WarehouseService`/`WarehouseAdminController`(PR #17)와 일관됨.
+- 커밋 4개(DTO -> Repository 쿼리 -> Service -> Controller)를 각각 `git checkout`해 `./gradlew compileJava --no-daemon`으로 개별 빌드 확인 - 4개 전부 독립적으로 컴파일 성공, 빌드 가능 우선 원칙을 지키면서 최대한 잘게 쪼갠 분리로 판단.
+
+### 독립 검증
+- `docker compose up -d db`(POSTGRES_DB/USER/PASSWORD를 kokbaejeong/kokbaejeong_user/change_me로 지정)로 Postgres를 띄우고 백엔드를 환경변수로 직접 기동, jshell + spring-security-crypto의 `BCryptPasswordEncoder`로 만든 해시를 admin 테이블에 심어 로그인 토큰 발급, 창고 1개를 SQL로 시딩.
+- PR 본문이 주장한 13가지 시나리오(등록 201/없는 창고 404 WAREHOUSE_NOT_FOUND/빈 name 400/목록 200/단건 200/없는 도크 404/수정 200 필드 반영/raw SQL로 ACTIVE 배정 심고 비활성화 시도 400 DOCK_HAS_ACTIVE_ASSIGNMENT/배정 CANCELLED 처리 후 재시도 200 active:false/비활성 도크도 목록 노출/재활성화 200 active:true/없는 도크 비활성화 404/무토큰 401)를 curl로 전부 재현해 모두 통과 확인.
+- `./gradlew compileJava --no-daemon` 빌드 성공 확인.
+- 검증에 사용한 Postgres 컨테이너/볼륨은 `docker compose down -v`로 완전히 제거, 백엔드 프로세스 종료, `.env`는 생성하지 않음, `git status` clean 확인.
+
+### 최종 판정
+승인. `main`에 머지 완료 (squash merge, 브랜치 삭제).
+
+비차단 참고사항(필수 쿼리 파라미터 누락 시 응답 포맷이 앱 공통 에러 포맷과 다름)은 `docs/후속작업.md`에 기록.
