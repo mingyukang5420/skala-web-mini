@@ -329,3 +329,45 @@ GitHub 정책상 PR 작성자와 리뷰 실행 계정이 동일하면 정식 App
 승인. `main`에 머지 완료 (squash merge, 브랜치 삭제).
 
 비차단 참고사항(관리자 수정 폼의 비동기 초기값 로드가 빠른 사용자 입력을 덮어쓸 수 있는 이론적 레이스 컨디션)은 `docs/후속작업.md`에 기록.
+
+## 2026-09-09 - PR #24: feat: 창고 혼잡도 AI 요약 기능 추가
+
+- 이슈: #11 [Feature] 창고 혼잡도 AI 요약 기능 (REQ-FUNC-008, Should - 시간 부족 시 최우선 제외 대상이었으나 드롭되지 않고 구현됨)
+- 브랜치: `feat/11-ai-congestion-summary` → `main`
+- 근거 문서: `기능명세서.md` REQ-FUNC-008, `설계_참고자료.md`(외부 연동 아키텍처 - "별도 저장 없이 요청 시점에 집계 후 외부 LLM API 호출"), `콕배정-API.yml`(`/admin/warehouses/{id}/summary`), `docs/작업계획서.md` §3-2, `docs/후속작업.md`(PR #20 - dock.status 자동 미반영 결정)
+
+### 검토 범위
+- `WarehouseSummaryResponse`(warehouseId, occupancyRate, summary), `WarehouseSummaryService`, `WarehouseAdminController`(`GET /admin/warehouses/{id}/summary` 추가), `AdminWarehouseListView.vue`(혼잡도 요약 버튼/렌더링)
+
+### occupancyRate 계산 기준 검토 (이번 PR의 핵심 판단)
+`콕배정-API.yml`, `설계_참고자료.md`, `02_설계_DB`의 `설계_v1`~`설계_v5` 전체를 `textutil -convert txt -stdout`으로 변환해 확인했으나, occupancyRate을 dock.status 기준으로 계산할지 실제 ACTIVE 배정 기준으로 계산할지를 명시한 문서는 어디에도 없다 - `설계_v2`는 "점유 데이터 집계 후 요청"이라는 아키텍처 다이어그램 수준 서술만, `설계_v3`는 API 스펙(`200: { warehouseId, occupancyRate, summary }`, 도크 없으면 occupancyRate=0 + 기본 문구)만 있고 계산 방법 자체는 어느 버전에도 기재되어 있지 않다. 다만 PR #20 리뷰에서 확인되어 `docs/후속작업.md`에 기록된 `설계_v2` "사용자 결정 사항"("도크 상태 갱신 방식: 자동 반영 없음")에 따르면, dock.status 기준으로 계산할 경우 배정이 아무리 쌓여도 점유율이 항상 0으로 나오는 명백한 오류가 발생한다. 이 PR이 실제 ACTIVE 배정 수 / 활성 도크 수로 정의한 것은 문서상 반박 근거가 없고, 유일하게 정확한 값을 낼 수 있는 방법이라는 점에서 PR #20/#21과 같은 계열의 타당한 추론적 판단으로 확인했다. `AssignmentRepository.existsByDockIdAndStatus(dockId, ACTIVE)`를 도크마다 호출하는 N+1 스타일 쿼리이나, 이 프로젝트 규모(창고당 도크 수가 매우 적음)에서는 실질적 문제가 되지 않아 비차단으로 판단, `docs/후속작업.md`에 참고용으로만 기록.
+
+### LLM 호출 실패 폴백 검토
+`generateSummary()`가 `chatClient.prompt().user(prompt).call().content()`를 `catch (RuntimeException e)`로 감싸 집계값 기반 문장으로 대체하는 구조. 모든 `RuntimeException`을 잡는 것은 원론적으로 과도할 수 있어(예: 프롬프트 구성 과정의 코드 버그가 외부 API 장애로 오인될 위험), `spring-ai-retry:1.1.4`(이 프로젝트가 쓰는 `springAiVersion`) jar를 직접 열어 확인한 결과 `TransientAiException`/`NonTransientAiException`이 존재하나 둘 다 `RuntimeException`을 직접 상속하고 공통 상위 타입이 없어, 더 좁히려면 멀티캐치(`catch (TransientAiException | NonTransientAiException e)`)가 필요함을 확인했다. 3일짜리 프로젝트에서 블로킹할 정도는 아니라고 판단, `docs/후속작업.md`에 비차단 항목으로 기록.
+실제 `OPENAI_API_KEY`가 없는 환경이라 정상 호출 경로는 이 리뷰에서도 검증하지 못했음 - 이는 PR 본문에도 정직하게 공개되어 있음을 확인. 폴백 경로는 아래 독립 검증에서 직접 재현해 정확히 동작함을 확인했다.
+
+### `WarehouseAdminController`의 서비스 중복 주입 검토
+`WarehouseAdminController`가 `WarehouseService`와 `WarehouseSummaryService`를 함께 주입받고, `WarehouseSummaryService`는 `WarehouseService.findWarehouseOrThrow()`(private)를 재사용하지 않고 `warehouseRepository.findById()`를 자체적으로 다시 호출한다. `WarehouseService`의 해당 메서드가 private이라 리팩터링 없이는 재사용이 불가능하고, 기존 코드베이스의 다른 서비스들도 각자 자신의 리포지토리 조회를 갖는 패턴이라 이번 PR만의 새로운 문제는 아님. 비차단으로 판단, `docs/후속작업.md`에 참고용으로 기록.
+
+### 독립 검증
+- `lsof -ti:8080,5173 | xargs -r kill -9` 후 `docker compose up -d db`(POSTGRES_DB/USER/PASSWORD 환경변수 직접 전달), 백엔드를 `SPRING_DATASOURCE_URL`/`USERNAME`/`PASSWORD`/`OPENAI_API_KEY=sk-dummy`/`JWT_SECRET`(랜덤 생성) 환경변수로 직접 `bootRun`.
+- 창고 3개를 시딩: 도크 0개(빈창고), 도크 2개/배정 0개(한산창고), 도크 2개/배정 1개(바쁜창고 - 방문자 `POST /assignments`로 실제 ACTIVE 배정 생성). 관리자 계정은 `spring-security-crypto`/`spring-jcl` jar + jshell로 bcrypt 해시 생성 후 SQL로 직접 시딩.
+- `/admin/warehouses/{id}/summary` 5개 시나리오 curl로 재현:
+  - 빈창고(도크 0개) → 200, `{occupancyRate:0.0, summary:"등록된 도크가 없어 혼잡도를 계산할 수 없습니다."}`, 응답 시간 **~26ms**(즉시 - LLM 호출 스킵 확인)
+  - 한산창고(도크 2/배정 0) → 200, `{occupancyRate:0.0, summary:"전체 활성 도크 2개 중 0개가 배정되어 점유율은 0%입니다."}`
+  - 바쁜창고(도크 2/배정 1) → 200, `{occupancyRate:0.5, summary:"전체 활성 도크 2개 중 1개가 배정되어 점유율은 50%입니다."}`, 응답 시간 **~658ms**(빈창고 대비 뚜렷이 느림 - 더미 키로 실제 OpenAI에 네트워크 호출을 시도한 뒤 실패해 폴백으로 전환됨을 응답 시간으로 간접 확인)
+  - 없는 창고(999) → 404 `WAREHOUSE_NOT_FOUND`
+  - 무토큰 → 401 `AUTH_FAILED`
+- Playwright(`playwright-core`, 시스템 Chrome `channel:'chrome'`, headless, 모바일 뷰포트 390x844)로 `npm run dev`(`VITE_API_BASE_URL=http://localhost:8080`) 프론트에서 관리자 로그인 → 창고 목록에서 "혼잡도 요약" 버튼 클릭 → 빈창고 "점유율 0% - 등록된 도크가 없어..." / 바쁜창고 "점유율 50% - 전체 활성 도크 2개 중 1개가 배정되어..."가 화면에 정확히 렌더링됨을 스크린샷으로 확인, `page.on('console'/'pageerror')` 전 과정 에러 없음.
+
+### 빌드/커밋 단위 검증
+- `cd backend && ./gradlew compileJava --no-daemon`, `cd frontend && npm run build` 각각 성공
+- 4개 커밋(DTO → Service → Controller → 프론트 렌더링) 각각 개별 `git checkout` 후 `./gradlew compileJava --no-daemon`으로 독립 빌드 성공 확인
+
+### 독립 검증 환경
+- 검증에 사용한 Postgres 컨테이너/볼륨은 `docker compose down -v`로 완전히 제거, 백엔드/프론트 프로세스 종료, `.env`는 생성하지 않음, `git status` clean 확인, `main` 브랜치로 복귀
+
+### 최종 판정
+승인. `main`에 머지 완료 (squash merge, 브랜치 삭제).
+
+비차단 참고사항(LLM 호출 실패 시 `RuntimeException` 캐치 범위가 넓은 점, `existsByDockIdAndStatus` N+1 스타일 쿼리, `WarehouseSummaryService`의 별도 창고 조회, 실제 `OPENAI_API_KEY`로 정상 호출 경로 사전 검증 필요)은 `docs/후속작업.md`에 기록.
