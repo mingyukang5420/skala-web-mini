@@ -85,3 +85,34 @@ GitHub 정책상 PR 작성자와 리뷰 실행 계정이 동일하면 정식 App
 승인. `main`에 머지 완료 (squash merge, 브랜치 삭제).
 
 비차단 참고사항 없음.
+
+## 2026-09-09 - PR #17: feat: add warehouse admin CRUD endpoints
+
+- 이슈: #4 [Feature] 창고 관리 CRUD API
+- 브랜치: `feat/4-warehouse-admin-crud` → `main`
+- 근거 문서: `기능명세서.md` REQ-FUNC-006, `설계_참고자료.md`(DTO 표), `콕배정-API.yml`(`/admin/warehouses` 전체)
+
+### 검토 범위
+- `WarehouseAdminController`(GET/POST `/admin/warehouses`, GET/PUT `/admin/warehouses/{id}`, POST `/admin/warehouses/{id}/(de)activate`)
+- `WarehouseService`(등록/전체조회/단건조회/수정/활성화/비활성화)
+- `WarehouseCreateRequest`, `WarehouseAdminResponse` DTO
+
+### 검토 결과 (승인)
+- 6개 엔드포인트 모두 `콕배정-API.yml`의 경로/메서드/상태코드(등록 201, 나머지 200, 404, 400)와 정확히 일치.
+- `WarehouseCreateRequest`를 POST/PUT 양쪽에 재사용하고 별도 `UpdateRequest`를 만들지 않은 것은 `설계_참고자료.md` DTO 표 명명과는 다르지만, API yml이 PUT 요청 바디에도 동일한 `$ref: WarehouseCreateRequest` 스키마를 명시하고 있어 API 스펙을 그대로 따른 타당한 선택으로 판단(yml이 우선 근거 문서).
+- `WarehouseService.getAll()`/`getById()`가 `deletedAt` 기준 필터링을 하지 않아, 목록/단건 조회 모두 비활성 창고를 포함 - "비활성화 포함" 스펙과 "수정 폼 진입용 단건 조회"에서 재활성화 대상을 볼 수 있어야 하는 요구를 정확히 충족.
+- `deactivate()`/`activate()`는 자기 자신의 `deletedAt`만 토글하고 도크 테이블을 전혀 참조하지 않음 - `콕배정-API.yml`의 "하위 도크는 함께 비활성화하지 않음" 명시사항과 일치(도크 엔티티가 아직 없어 카스케이딩 코드 자체가 존재하지 않음도 확인).
+- 대상 없음 시 기존 `ErrorCode.WAREHOUSE_NOT_FOUND`(PR #15에서 정의)를 그대로 재사용, 신규 에러코드 없음.
+- `@Transactional(readOnly = true)`를 클래스 레벨에 걸고 쓰기 메서드에만 `@Transactional`을 오버라이드하는 패턴은 통상적인 Spring 관례에 부합. `update()`가 명시적 `save()` 없이 변경 감지(dirty checking)로 반영되는 것도 트랜잭션 내 관리 엔티티라 정상 동작 확인.
+- 생성자 주입 스타일이 `AuthService`(PR #16)와 일관됨.
+
+### 독립 검증
+- Docker로 Postgres를 임시로 띄우고(`.env.example`을 `.env`로 복사해 `POSTGRES_DB=kokbaejeong`/`POSTGRES_USER=kokbaejeong_user`/`POSTGRES_PASSWORD=change_me` 사용), 백엔드를 환경변수로 직접 기동, jshell + spring-security-crypto의 `BCryptPasswordEncoder`로 만든 해시를 admin 테이블에 심어 로그인 토큰 발급.
+- PR 본문이 주장한 10가지 시나리오(등록 201/검증 실패 400/목록 200/단건 200/404/수정 200/비활성화 200 active:false/비활성화 후에도 목록·단건에 노출/재활성화 200 active:true/없는 창고 비활성화 404/무토큰 401)를 curl로 전부 재현해 모두 통과 확인.
+- `./gradlew compileJava --no-daemon` 빌드 성공 확인.
+- 검증에 사용한 Postgres 컨테이너/볼륨은 `docker compose down -v`로 완전히 제거, 백엔드 프로세스 종료, 임시로 만든 `.env` 삭제, `git status` clean 확인.
+
+### 최종 판정
+승인. `main`에 머지 완료 (squash merge, 브랜치 삭제).
+
+비차단 참고사항 없음.
