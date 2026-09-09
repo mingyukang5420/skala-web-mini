@@ -6,6 +6,7 @@ import AdminWarehouseListView from '../views/admin/AdminWarehouseListView.vue'
 import AdminWarehouseFormView from '../views/admin/AdminWarehouseFormView.vue'
 import AdminDockListView from '../views/admin/AdminDockListView.vue'
 import AdminDockFormView from '../views/admin/AdminDockFormView.vue'
+import AdminSummaryView from '../views/admin/AdminSummaryView.vue'
 import { isLoggedIn } from '../api/adminClient'
 
 const router = createRouter({
@@ -48,6 +49,12 @@ const router = createRouter({
       path: '/admin/docks/:id/edit',
       name: 'admin-dock-edit',
       component: AdminDockFormView,
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/admin/summary',
+      name: 'admin-summary',
+      component: AdminSummaryView,
       meta: { requiresAuth: true },
     },
   ],
