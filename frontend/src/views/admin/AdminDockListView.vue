@@ -2,6 +2,7 @@
 import { ref, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { adminFetch } from '../../api/adminClient'
+import AdminLayout from './AdminLayout.vue'
 
 const route = useRoute()
 const warehouseId = route.params.id
@@ -40,23 +41,25 @@ onMounted(load)
 </script>
 
 <template>
-  <div class="page">
-    <h1>도크 관리</h1>
-    <div class="header-row">
-      <router-link :to="{ name: 'admin-warehouses' }">← 창고 목록</router-link>
-      <router-link :to="{ name: 'admin-dock-new', params: { id: warehouseId } }">+ 도크 등록</router-link>
-    </div>
+  <AdminLayout>
+    <div class="page">
+      <h1>도크 관리</h1>
+      <div class="header-row">
+        <router-link :to="{ name: 'admin-warehouses' }">← 창고 목록</router-link>
+        <router-link :to="{ name: 'admin-dock-new', params: { id: warehouseId } }">+ 도크 등록</router-link>
+      </div>
 
-    <p v-if="error" class="error-text">{{ error }}</p>
-    <div v-if="loading">불러오는 중...</div>
-    <ul v-else class="list">
-      <li v-for="d in docks" :key="d.id">
-        <strong>{{ d.name }}</strong>
-        <span>{{ sizeLabel[d.size] }} / {{ statusLabel[d.status] }}</span>
-        <span :class="d.active ? 'badge-active' : 'badge-inactive'">{{ d.active ? '활성' : '비활성' }}</span>
-        <router-link :to="{ name: 'admin-dock-edit', params: { id: d.id } }">수정</router-link>
-        <button @click="toggleActive(d)">{{ d.active ? '비활성화' : '활성화' }}</button>
-      </li>
-    </ul>
-  </div>
+      <p v-if="error" class="error-text">{{ error }}</p>
+      <div v-if="loading">불러오는 중...</div>
+      <ul v-else class="list">
+        <li v-for="d in docks" :key="d.id">
+          <strong>{{ d.name }}</strong>
+          <span>{{ sizeLabel[d.size] }} / {{ statusLabel[d.status] }}</span>
+          <span :class="d.active ? 'badge-active' : 'badge-inactive'">{{ d.active ? '활성' : '비활성' }}</span>
+          <router-link :to="{ name: 'admin-dock-edit', params: { id: d.id } }">수정</router-link>
+          <button @click="toggleActive(d)">{{ d.active ? '비활성화' : '활성화' }}</button>
+        </li>
+      </ul>
+    </div>
+  </AdminLayout>
 </template>

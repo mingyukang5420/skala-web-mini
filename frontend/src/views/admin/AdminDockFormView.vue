@@ -2,6 +2,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { adminFetch } from '../../api/adminClient'
+import AdminLayout from './AdminLayout.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -62,35 +63,37 @@ onMounted(loadExisting)
 </script>
 
 <template>
-  <div class="page">
-    <h1>{{ isEdit ? '도크 수정' : '도크 등록' }}</h1>
-    <form @submit.prevent="submit">
-      <label>
-        도크명
-        <input v-model="form.name" required />
-      </label>
-      <label>
-        규격
-        <select v-model="form.size">
-          <option value="LARGE">대형</option>
-          <option value="MEDIUM">중형</option>
-          <option value="SMALL">소형</option>
-        </select>
-      </label>
-      <label>
-        상태
-        <select v-model="form.status">
-          <option value="AVAILABLE">배정 가능</option>
-          <option value="OCCUPIED">사용 중</option>
-          <option value="MAINTENANCE">점검 중</option>
-        </select>
-      </label>
-      <label><input v-model="form.hasLeveler" type="checkbox" /> 레벨러</label>
-      <label><input v-model="form.hasDockSeal" type="checkbox" /> 도크씰</label>
-      <label><input v-model="form.supportsColdChain" type="checkbox" /> 냉동/냉장</label>
-      <label><input v-model="form.supportsHazmat" type="checkbox" /> 위험물</label>
-      <p v-if="error" class="error-text">{{ error }}</p>
-      <button type="submit" :disabled="submitting">저장</button>
-    </form>
-  </div>
+  <AdminLayout>
+    <div class="page">
+      <h1>{{ isEdit ? '도크 수정' : '도크 등록' }}</h1>
+      <form @submit.prevent="submit">
+        <label>
+          도크명
+          <input v-model="form.name" required />
+        </label>
+        <label>
+          규격
+          <select v-model="form.size">
+            <option value="LARGE">대형</option>
+            <option value="MEDIUM">중형</option>
+            <option value="SMALL">소형</option>
+          </select>
+        </label>
+        <label>
+          상태
+          <select v-model="form.status">
+            <option value="AVAILABLE">배정 가능</option>
+            <option value="OCCUPIED">사용 중</option>
+            <option value="MAINTENANCE">점검 중</option>
+          </select>
+        </label>
+        <label><input v-model="form.hasLeveler" type="checkbox" /> 레벨러</label>
+        <label><input v-model="form.hasDockSeal" type="checkbox" /> 도크씰</label>
+        <label><input v-model="form.supportsColdChain" type="checkbox" /> 냉동/냉장</label>
+        <label><input v-model="form.supportsHazmat" type="checkbox" /> 위험물</label>
+        <p v-if="error" class="error-text">{{ error }}</p>
+        <button type="submit" :disabled="submitting">저장</button>
+      </form>
+    </div>
+  </AdminLayout>
 </template>
