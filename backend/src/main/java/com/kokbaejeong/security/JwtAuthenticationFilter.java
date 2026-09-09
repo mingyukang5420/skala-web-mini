@@ -27,6 +27,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
+        // CORS preflight 요청은 인증 헤더 없이 브라우저가 자동으로 보내므로 그대로 통과시킨다.
+        if ("OPTIONS".equalsIgnoreCase(request.getMethod())) {
+            filterChain.doFilter(request, response);
+            return;
+        }
+
         if (LOGIN_PATH.equals(request.getRequestURI())) {
             filterChain.doFilter(request, response);
             return;
