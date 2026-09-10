@@ -108,7 +108,14 @@ async function submit() {
             :loading="loadingExisting"
           />
           <v-select v-model="form.size" :items="sizeOptions" label="규격" :disabled="loadingExisting" />
-          <v-select v-model="form.status" :items="statusOptions" label="가동 상태" :disabled="loadingExisting" />
+          <v-select
+            v-model="form.status"
+            :items="statusOptions"
+            label="가동 상태"
+            :disabled="loadingExisting"
+            hint="실제 배정 여부와 별개로 관리자가 직접 설정하는 값입니다. 실시간 배정 현황은 혼잡도 요약에서 확인하세요."
+            persistent-hint
+          />
 
           <div class="text-caption text-medium-emphasis mt-1 mb-n1">보유 특성</div>
           <div class="d-flex flex-wrap ga-4">
