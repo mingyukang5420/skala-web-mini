@@ -1,8 +1,10 @@
 <script setup>
 import { ref, computed } from 'vue'
 import { useRoute } from 'vue-router'
+import { useDisplay } from 'vuetify'
 import { apiFetch } from '../api/client'
 
+const { mobile } = useDisplay()
 const route = useRoute()
 const warehouseId = route.params.warehouseId
 
@@ -22,6 +24,13 @@ const cancelDialog = ref(false)
 const cancelPin = ref('')
 const cancelSubmitting = ref(false)
 const cancelError = ref('')
+
+function toDatetimeLocal(date) {
+  const pad = (n) => String(n).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
+}
+
+const minScheduledTime = toDatetimeLocal(new Date())
 
 const sizeLabel = { LARGE: '대형', MEDIUM: '중형', SMALL: '소형' }
 const statusMeta = {
@@ -230,7 +239,33 @@ loadData()
       </div>
       <p class="text-body-2 text-medium-emphasis mb-4">실시간 도크 배정 및 가동 상태 모니터링</p>
 
-      <v-table density="comfortable" class="dock-table">
+      <!-- 좁은 화면(주 사용자: 모바일로 접속하는 방문 기사)에서는 표 대신 카드 목록으로 -->
+      <div v-if="mobile" class="d-flex flex-column ga-2">
+        <v-card
+          v-for="dock in docks"
+          :key="dock.id"
+          rounded="lg"
+          variant="outlined"
+          class="dock-mobile-card"
+          :class="{ 'dock-row-selected': selectedDock?.id === dock.id, 'dock-row-disabled': dock.status !== 'AVAILABLE' }"
+          @click="selectDock(dock)"
+        >
+          <v-card-text class="d-flex flex-column ga-2">
+            <div class="d-flex align-center justify-space-between">
+              <span class="font-weight-bold">{{ dock.name }}</span>
+              <v-chip size="small" variant="tonal" :color="statusMeta[dock.status].color">
+                {{ statusMeta[dock.status].label }}
+              </v-chip>
+            </div>
+            <div class="d-flex flex-wrap ga-1">
+              <v-chip size="small" variant="outlined">{{ sizeLabel[dock.size] }}</v-chip>
+              <v-chip v-for="f in dockFeatures(dock)" :key="f" size="small" variant="outlined">{{ f }}</v-chip>
+            </div>
+          </v-card-text>
+        </v-card>
+      </div>
+
+      <v-table v-else density="comfortable" class="dock-table">
         <thead>
           <tr>
             <th>도크명</th>
@@ -276,6 +311,7 @@ loadData()
                 v-model="form.scheduledTime"
                 label="도착 예정 시각"
                 type="datetime-local"
+                :min="minScheduledTime"
                 prepend-inner-icon="mdi-clock-outline"
                 class="flex-grow-1"
                 style="min-width: 200px"
@@ -295,7 +331,7 @@ loadData()
             <v-alert v-if="assignError" type="warning" variant="tonal" class="mb-4">{{ assignError }}</v-alert>
 
             <v-btn block color="secondary" size="large" variant="flat" type="submit" :loading="submitting">
-              도크 배정 완료
+              도크 배정 신청
             </v-btn>
           </v-form>
         </v-card-text>
@@ -316,7 +352,8 @@ loadData()
   border-radius: 10px;
 }
 
-.dock-row {
+.dock-row,
+.dock-mobile-card {
   cursor: pointer;
   border-left: 3px solid transparent;
 }
