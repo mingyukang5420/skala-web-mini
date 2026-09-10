@@ -4,6 +4,12 @@ import { clearToken } from '../../api/adminClient'
 
 const router = useRouter()
 
+const navItems = [
+  { to: { name: 'admin-warehouses' }, label: '창고 관리', icon: 'mdi-warehouse' },
+  { to: { name: 'admin-docks-overview' }, label: '도크 관리', icon: 'mdi-truck-delivery-outline' },
+  { to: { name: 'admin-summary' }, label: '혼잡도 요약', icon: 'mdi-chart-bar' },
+]
+
 function logout() {
   clearToken()
   router.push({ name: 'admin-login' })
@@ -11,99 +17,58 @@ function logout() {
 </script>
 
 <template>
-  <div class="admin-shell">
-    <aside class="admin-sidebar">
-      <div class="admin-brand">콕배정 관리자</div>
-      <nav class="admin-nav">
-        <router-link :to="{ name: 'admin-warehouses' }">창고 관리</router-link>
-        <router-link :to="{ name: 'admin-summary' }">혼잡도 요약</router-link>
-      </nav>
-      <button class="logout-btn" @click="logout">로그아웃</button>
-    </aside>
-    <main class="admin-content">
+  <v-navigation-drawer permanent theme="kokbaejeongDark" width="220" color="primary">
+    <div class="admin-brand">
+      <v-avatar size="32" rounded="lg">
+        <v-img src="/favicon.png" alt="콕배정" />
+      </v-avatar>
+      <span class="admin-brand-text">콕배정 관리자</span>
+    </div>
+
+    <v-list nav density="comfortable" class="admin-nav">
+      <v-list-item
+        v-for="item in navItems"
+        :key="item.label"
+        :to="item.to"
+        :prepend-icon="item.icon"
+        :title="item.label"
+        rounded="lg"
+      />
+    </v-list>
+
+    <template #append>
+      <div class="pa-3">
+        <v-btn block variant="outlined" color="white" prepend-icon="mdi-logout" @click="logout">로그아웃</v-btn>
+      </div>
+    </template>
+  </v-navigation-drawer>
+
+  <v-main>
+    <v-container fluid class="admin-content pa-6 pa-md-8">
       <slot />
-    </main>
-  </div>
+    </v-container>
+  </v-main>
 </template>
 
 <style scoped>
-.admin-shell {
-  display: flex;
-  min-height: 100vh;
-}
-
-.admin-sidebar {
-  width: 180px;
-  flex-shrink: 0;
-  border-right: 1px solid var(--border);
-  padding: 20px 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
-
 .admin-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 20px 16px 12px;
+}
+
+.admin-brand-text {
+  color: #fff;
   font-weight: 700;
-  color: var(--text-h);
+  font-size: 16px;
 }
 
 .admin-nav {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.admin-nav a {
-  padding: 8px 10px;
-  border-radius: 6px;
-  color: var(--text);
-  text-decoration: none;
-}
-
-.admin-nav a.router-link-active {
-  background: var(--accent-bg);
-  color: var(--accent);
-  font-weight: 600;
-}
-
-.logout-btn {
-  margin-top: auto;
-  padding: 8px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: transparent;
+  padding: 4px 8px;
 }
 
 .admin-content {
-  flex: 1;
-  min-width: 0;
-}
-
-.admin-content .page {
-  max-width: none;
-  margin: 0;
-}
-
-@media (max-width: 640px) {
-  .admin-shell {
-    flex-direction: column;
-  }
-
-  .admin-sidebar {
-    width: auto;
-    flex-direction: row;
-    align-items: center;
-    border-right: none;
-    border-bottom: 1px solid var(--border);
-  }
-
-  .admin-nav {
-    flex-direction: row;
-  }
-
-  .logout-btn {
-    margin-top: 0;
-    margin-left: auto;
-  }
+  max-width: 1100px;
 }
 </style>

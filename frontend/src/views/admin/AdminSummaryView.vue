@@ -46,125 +46,73 @@ onMounted(loadWarehouses)
 
 <template>
   <AdminLayout>
-    <div class="page">
-      <h1>창고 혼잡도 요약</h1>
-      <p class="subtitle">실시간 배정 데이터 기준 도크별 점유 현황</p>
-
-      <label class="warehouse-select">
-        대상 창고
-        <select v-model="selectedWarehouseId" @change="loadSummary">
-          <option v-for="w in warehouses" :key="w.id" :value="w.id">{{ w.name }}</option>
-        </select>
-      </label>
-
-      <p v-if="error" class="error-text">{{ error }}</p>
-      <div v-if="loading">불러오는 중...</div>
-
-      <template v-else-if="summary">
-        <div class="ai-box">
-          <strong>AI 분석 요약</strong>
-          <p>{{ summary.summary }}</p>
-        </div>
-
-        <ul class="dock-occupancy-list">
-          <li v-for="d in summary.docks" :key="d.dockId">
-            <span class="dock-name">{{ d.name }}</span>
-            <div class="bar-track">
-              <div class="bar-fill" :class="{ occupied: d.occupied }" :style="{ width: d.occupied ? '100%' : '0%' }"></div>
-            </div>
-            <span :class="d.occupied ? 'badge-occupied' : 'badge-free'">{{ occupiedLabel(d) }}</span>
-          </li>
-        </ul>
-      </template>
+    <div class="mb-6">
+      <h1 class="text-h5 font-weight-bold">창고 혼잡도 요약</h1>
+      <p class="text-body-2 text-medium-emphasis mt-1">실시간 배정 데이터 기준 도크별 점유 현황</p>
     </div>
+
+    <v-select
+      v-model="selectedWarehouseId"
+      :items="warehouses"
+      item-title="name"
+      item-value="id"
+      label="대상 창고"
+      max-width="280"
+      class="mb-4"
+      @update:model-value="loadSummary"
+    />
+
+    <v-alert v-if="error" type="error" density="compact" variant="tonal" class="mb-4">{{ error }}</v-alert>
+
+    <div v-if="loading" class="d-flex align-center ga-2 text-medium-emphasis">
+      <v-progress-circular size="20" width="2" indeterminate />
+      불러오는 중...
+    </div>
+
+    <template v-else-if="summary">
+      <v-card rounded="lg" variant="flat" class="ai-box mb-6 pa-4">
+        <div class="d-flex align-center ga-2 mb-2">
+          <v-avatar size="24" color="primary" rounded="sm">
+            <v-icon icon="mdi-robot-outline" size="16" color="white" />
+          </v-avatar>
+          <span class="font-weight-bold">AI 분석 요약</span>
+        </div>
+        <p class="text-body-2">{{ summary.summary }}</p>
+      </v-card>
+
+      <div class="text-subtitle-1 font-weight-medium mb-3">도크별 실시간 점유율</div>
+
+      <v-card rounded="lg" variant="flat" border>
+        <v-list lines="two">
+          <v-list-item v-for="d in summary.docks" :key="d.dockId">
+            <div class="d-flex align-center ga-4 w-100">
+              <span class="dock-name font-weight-medium">{{ d.name }}</span>
+              <v-progress-linear
+                :model-value="d.occupied ? 100 : 0"
+                :color="d.occupied ? 'primary' : 'success'"
+                height="10"
+                rounded
+                class="flex-grow-1"
+              />
+              <v-chip :color="d.occupied ? 'primary' : 'success'" size="small" variant="tonal" class="flex-shrink-0">
+                {{ occupiedLabel(d) }}
+              </v-chip>
+            </div>
+          </v-list-item>
+        </v-list>
+      </v-card>
+    </template>
   </AdminLayout>
 </template>
 
 <style scoped>
-.subtitle {
-  color: var(--text);
-  margin-bottom: 16px;
-}
-
-.warehouse-select {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  font-size: 14px;
-  max-width: 240px;
-  margin-bottom: 16px;
-}
-
 .ai-box {
-  background: var(--accent-bg);
-  border: 1px solid var(--accent-border, var(--border));
-  border-radius: 10px;
-  padding: 14px 16px;
-  margin-bottom: 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.dock-occupancy-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.dock-occupancy-list li {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 14px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
+  background: rgba(47, 143, 232, 0.1) !important;
+  color: inherit !important;
 }
 
 .dock-name {
-  width: 80px;
+  width: 90px;
   flex-shrink: 0;
-  font-weight: 600;
-}
-
-.bar-track {
-  flex: 1;
-  height: 10px;
-  border-radius: 999px;
-  background: var(--border);
-  overflow: hidden;
-}
-
-.bar-fill {
-  height: 100%;
-  background: var(--success);
-}
-
-.bar-fill.occupied {
-  background: var(--accent);
-}
-
-.badge-occupied,
-.badge-free {
-  font-size: 13px;
-  padding: 2px 8px;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  flex-shrink: 0;
-}
-
-.badge-occupied {
-  color: var(--accent);
-  border-color: var(--accent);
-  background: var(--accent-bg);
-}
-
-.badge-free {
-  color: var(--success);
-  border-color: var(--success);
-  background: var(--success-bg);
 }
 </style>
