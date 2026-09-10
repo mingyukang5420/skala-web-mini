@@ -484,3 +484,32 @@ PR 본문이 스스로 밝힌 "삭제 확인 팝업(하드 삭제) 미반영"에
 승인. `main`에 머지 완료 (squash merge, 브랜치 삭제).
 
 새로 발견된 비차단 항목 없음. PR #27에서 이미 기록된 "도크별 점유 바 이진 표시" 항목은 이번 PR에서도 동일한 이유(백엔드 API 제약)로 유지되며, "사이드바 도크 관리 메뉴 누락" 항목은 이번 PR로 해소되었다.
+
+## 2026-09-10 - PR #32: fix: 관리자 사이드바 테마 버그, 창고 정보 구조 개선, 방문 기사 배정 흐름 재구성
+
+- 이슈: #31 [Fix] 관리자 사이드바 테마 버그 및 정보 구조 개선, 방문 기사 배정 흐름 재구성
+- 브랜치: `feat/31-admin-ia-and-assign-flow-fix` → `main`
+- 근거 문서: `../web-draft/콕배정_와이어프레임.zip`(SCR-ADMIN-001/002/003, SCR-ASSIGN-001/002, SCR-ASSIGN-PIN-POPUP), 이슈 #31, PR #30 리뷰 기록(2026-09-10 항목)
+
+### 검토 범위
+- `AdminLayout.vue`: `v-navigation-drawer`의 `theme="kokbaejeongDark" color="primary"` 제거, `theme="dark"` + `.admin-sidebar { background: #0f172a !important; }`로 교체해 커스텀 다크 테마의 `primary`(`#3B82F6`, 밝은 파랑)에 대한 의존을 끊음. 사이드바 메뉴도 "창고 관리" 단일 항목으로 축소.
+- `AdminWarehouseListView.vue`/`AdminDockListView.vue`: `v-data-table`을 감싸던 `<v-card border>`를 제거하고 `hide-default-footer` + `.flat-table` 스코프 스타일(헤더 밑줄 + 행 구분선)로 교체. 창고 목록의 상태(활성/비활성) 컬럼과 행별 관리 작업 버튼 4개(도크 관리/혼잡도 요약/수정/비활성화)는 마크업상 그대로 유지됨을 diff로 확인.
+- 라우트 재구성: `/admin/docks`, `/admin/summary`(둘 다 쿼리 파라미터로 창고를 전달하던 flat 라우트)를 `/admin/warehouses/:id/docks`, `/admin/warehouses/:id/summary`로 교체. 신규 `AdminWarehouseDetailLayout.vue`가 `props.warehouseId`(라우트 param)로 `adminFetch(/admin/warehouses/{id})`를 호출해 창고명을 헤더에 표시하고, `v-tabs`로 두 하위 화면을 전환. 드롭다운 재선택 UI 없음을 코드로 확인(기존 `AdminDockListView`/`AdminSummaryView`의 `loadWarehouses`/`v-select`/`onWarehouseChange` 로직이 통째로 삭제되고 `route.params.id` 직접 사용으로 대체됨).
+- `AssignView.vue`: 도크 목록을 `v-card` 나열에서 `<table>`(`dock-table`)로 변경(SCR-ASSIGN-001과 배치 일치). 배정 완료 시 `assignmentResult`가 있으면 `selectedDock`/`form`/`scheduledTimeLabel`/`specLabel`(전부 이미 클라이언트가 들고 있던 상태에서 계산되는 computed)로 지정 도크명/도착 예정 시각/담당 기사/보유 규격을 렌더링하는 전용 카드(SCR-ASSIGN-002)로 전환하고, 기존 도크 목록 `<table>`은 `v-else-if`로 완전히 대체되어 동시에 보이지 않음. "배정 취소"는 `router.push`/`:to` 없이 `cancelDialog` ref를 여는 같은 컴포넌트의 `v-dialog`(SCR-ASSIGN-PIN-POPUP과 배치 일치)로 처리, 확인 시 `apiFetch(POST /assignments/{id}/cancel)` 후 `cancelled.value = true`로 같은 카드 안에서 취소 상태를 보여줌(라우트 이동 없음).
+- `router/index.js`: 라우트별 `meta.title`을 추가하고 `router.afterEach`에서 `document.title = to.meta.title`로 반영. 방문 기사 라우트(`assign`, `cancel`)는 "콕배정 - ...", 관리자 라우트는 "콕배정 관리자 - ..."로 분리됨을 확인. `index.html`의 정적 `<title>`도 "콕배정 관리자" → "콕배정"으로 변경(SPA 초기 로드 시점에 방문 기사에게 "관리자" 문구가 잠깐이라도 보이는 것을 방지).
+
+### 독립 재현
+- 이미 `feat/31-admin-ia-and-assign-flow-fix`가 체크아웃된 메인 워크트리에서 그대로 검증(별도 워크트리 불필요, 작업 종료 후 `git status` clean 확인).
+- `initdb`+`pg_ctl`로 유닉스 소켓(`/tmp/pgsock32`) + TCP(포트 5433) 겸용 임시 Postgres 기동, `SPRING_DATASOURCE_URL=jdbc:postgresql://localhost:5433/kokbaejeong`/`OPENAI_API_KEY=sk-dummy`/`JWT_SECRET`(랜덤)로 `./gradlew bootRun`(PR #30의 `data.sql`이 창고 5/도크 18/배정 5/관리자 1을 그대로 시딩), `VITE_API_BASE_URL=http://localhost:8080`로 `npm run dev`.
+- Playwright(`playwright`, `channel: 'chrome'`, 시스템 Chrome, headless)로 실제 브라우저 시나리오를 스크립트 하나로 재현하고 매 단계 스크린샷 확보:
+  1. 관리자 로그인(`admin`/`admin1234`) 후 `/admin/warehouses`에서 `getComputedStyle(사이드바).backgroundColor`를 직접 읽어 `rgb(15, 23, 42)`(`#0f172a`)임을 확인(밝은 파랑 아님). 테이블에 `.v-data-table-footer` 없음, 상태 칩(`활성`) 존재, 두 번째 행 "물류센터 B"(첫 번째 행이 아님)에 버튼 4개(`["도크 관리","혼잡도 요약","수정","비활성화"]`)가 정확히 있음을 DOM에서 추출해 확인.
+  2. "물류센터 B" 행의 "도크 관리" 클릭 → URL이 `/admin/warehouses/2/docks`로 이동, 문서 타이틀 "콕배정 관리자 - 도크 관리", 헤더 "물류센터 B" 확인. 이어서 "혼잡도 요약" 탭 클릭 → 재선택 UI 없이 URL만 `/admin/warehouses/2/summary`로 바뀌고 헤더가 계속 "물류센터 B"로 유지됨을 확인(동일 창고 id, 동일 세션 안에서 탭 전환만 일어남을 검증).
+  3. `/w/1` 진입 → 문서 타이틀 "콕배정 - 도크 배정"(`관리자` 문구 없음), 도크 목록이 `<table>`로 렌더링됨을 확인. "배정 가능" 도크(A-1) 행 클릭 → 기사명/PIN 입력 후 "도크 배정 완료" 제출 → 배정 완료 카드에서 "지정 도크명"/"담당 기사"/"보유 규격" 라벨과 실제 값(`A-1`/`홍길동`/`대형 (레벨러, 도크씰 지원)`)이 렌더링됨을 텍스트로 확인, `document.querySelector('.dock-table')`이 `null`(기존 도크 표가 더 이상 DOM에 남아있지 않음)임을 확인, URL은 여전히 `/w/1`(라우트 이동 없음).
+  4. "배정 취소" 클릭 → URL이 그대로 `/w/1`인 상태에서 PIN 확인 모달(`v-dialog`)이 열림을 스크린샷으로 확인(와이어프레임 SCR-ASSIGN-PIN-POPUP과 배치 일치) → PIN `1234` 입력 후 "확인" → "배정이 취소됐습니다" 문구로 전환, URL은 계속 `/w/1`.
+  5. 관리자/방문 두 페이지 모두 `page.on('console'|'pageerror')`로 콘솔 에러 0건 확인.
+- 검증 후 프론트/백엔드 프로세스 종료, `pg_ctl stop`으로 임시 Postgres 중지 및 데이터 디렉터리/스크래치 파일 정리, `git status` clean 확인.
+
+### 최종 판정
+승인. `main`에 머지 완료 (squash merge, 브랜치 삭제).
+
+비차단 항목 2건을 `docs/후속작업.md`에 기록: (1) PR #27에서 기록된 "사이드바 도크 관리 메뉴 부재" 항목이 이번 PR의 드릴다운 재구성으로 해소되었음을 추가 기재, (2) 이번 PR로 새로 생긴 항목 - "배정 취소"가 인라인 PIN 모달로 바뀌면서 기존 `CancelView.vue`(`/assignments/:id/cancel`)로 가는 UI 경로가 사라져 URL 직접 접근으로만 도달 가능한 고아 화면이 됨(기능은 정상 동작, 접근 경로만 없어짐).
