@@ -2,6 +2,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { adminFetch } from '../../api/adminClient'
+import AdminLayout from './AdminLayout.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -44,15 +45,17 @@ onMounted(loadExisting)
 </script>
 
 <template>
-  <div class="page">
-    <h1>{{ isEdit ? '창고 수정' : '창고 등록' }}</h1>
-    <form @submit.prevent="submit">
-      <label>
-        창고명
-        <input v-model="name" required />
-      </label>
-      <p v-if="error" class="error-text">{{ error }}</p>
-      <button type="submit" :disabled="submitting">저장</button>
-    </form>
-  </div>
+  <AdminLayout>
+    <div class="page">
+      <h1>{{ isEdit ? '창고 수정' : '창고 등록' }}</h1>
+      <form @submit.prevent="submit">
+        <label>
+          창고명
+          <input v-model="name" required />
+        </label>
+        <p v-if="error" class="error-text">{{ error }}</p>
+        <button type="submit" :disabled="submitting">저장</button>
+      </form>
+    </div>
+  </AdminLayout>
 </template>
