@@ -45,6 +45,9 @@ public class AssignmentService {
             throw new BusinessException(ErrorCode.DOCK_NOT_AVAILABLE);
         }
 
+        if (request.scheduledTime() != null && request.scheduledTime().isBefore(LocalDateTime.now().minusMinutes(1))) {
+            throw new BusinessException(ErrorCode.INVALID_SCHEDULED_TIME);
+        }
         LocalDateTime scheduledTime = request.scheduledTime() != null ? request.scheduledTime() : LocalDateTime.now();
         String pinHash = passwordEncoder.encode(request.pin());
         Assignment assignment = new Assignment(dock, request.driverName(), scheduledTime, pinHash);
