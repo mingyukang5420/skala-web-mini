@@ -29,76 +29,42 @@ async function submitCancel() {
 
 <template>
   <div class="page">
-    <h1>배정 취소</h1>
-    <p>배정 번호 {{ assignmentId }}</p>
+    <v-card rounded="lg" variant="flat" border class="mt-8 pa-2">
+      <v-card-text v-if="!result" class="d-flex flex-column ga-1 text-center">
+        <div class="text-h6 font-weight-bold">PIN 확인</div>
+        <p class="text-body-2 text-medium-emphasis mb-2">배정 번호 {{ assignmentId }}의 배정을 취소합니다</p>
 
-    <form v-if="!result" class="cancel-form" @submit.prevent="submitCancel">
-      <label>
-        PIN (4자리 숫자)
-        <input v-model="pin" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" required />
-      </label>
+        <v-form @submit.prevent="submitCancel">
+          <v-text-field
+            v-model="pin"
+            label="PIN (4자리 숫자)"
+            inputmode="numeric"
+            pattern="[0-9]{4}"
+            maxlength="4"
+            required
+            class="mt-2"
+          />
+          <v-alert v-if="error" type="error" density="compact" variant="tonal" class="mb-2">{{ error }}</v-alert>
+          <v-btn block color="error" variant="flat" size="large" type="submit" :loading="submitting">
+            배정 취소
+          </v-btn>
+        </v-form>
+      </v-card-text>
 
-      <p v-if="error" class="error-text">{{ error }}</p>
-
-      <button type="submit" :disabled="submitting">{{ submitting ? '취소 중...' : '배정 취소' }}</button>
-    </form>
-
-    <div v-else class="success-box">
-      <p>배정이 취소됐습니다.</p>
-    </div>
+      <v-card-text v-else class="d-flex flex-column align-center text-center py-6">
+        <v-avatar color="success" variant="tonal" size="48" class="mb-3">
+          <v-icon icon="mdi-check-circle-outline" size="28" />
+        </v-avatar>
+        <div class="text-h6 font-weight-bold">배정이 취소됐습니다</div>
+      </v-card-text>
+    </v-card>
   </div>
 </template>
 
 <style scoped>
 .page {
-  max-width: 480px;
+  max-width: 420px;
   margin: 0 auto;
-  padding: 20px 16px 48px;
-}
-
-.cancel-form {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  margin-top: 16px;
-  padding: 16px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-}
-
-.cancel-form label {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  font-size: 14px;
-}
-
-.cancel-form input {
-  padding: 10px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--bg);
-  color: var(--text-h);
-}
-
-.cancel-form button {
-  padding: 12px;
-  border: none;
-  border-radius: 8px;
-  background: var(--accent);
-  color: #fff;
-  font-weight: 600;
-}
-
-.error-text {
-  color: var(--danger);
-}
-
-.success-box {
-  margin-top: 20px;
-  padding: 16px;
-  border-radius: 10px;
-  background: var(--success-bg);
-  color: var(--success);
+  padding: 16px 16px 48px;
 }
 </style>
