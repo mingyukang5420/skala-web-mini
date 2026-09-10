@@ -18,7 +18,17 @@ const assignError = ref('')
 const assignmentResult = ref(null)
 
 const sizeLabel = { LARGE: '대형', MEDIUM: '중형', SMALL: '소형' }
-const statusLabel = { AVAILABLE: '배정 가능', OCCUPIED: '사용 중', MAINTENANCE: '점검 중' }
+const statusMeta = {
+  AVAILABLE: { label: '배정 가능', color: 'success' },
+  OCCUPIED: { label: '사용 중', color: 'grey-darken-1' },
+  MAINTENANCE: { label: '점검 중', color: 'error' },
+}
+const featureMeta = [
+  { key: 'hasLeveler', label: '레벨러' },
+  { key: 'hasDockSeal', label: '도크씰' },
+  { key: 'supportsColdChain', label: '냉동/냉장' },
+  { key: 'supportsHazmat', label: '위험물' },
+]
 
 async function loadData() {
   loading.value = true
@@ -75,65 +85,96 @@ loadData()
 
 <template>
   <div class="page">
-    <div v-if="loading">불러오는 중...</div>
-
-    <div v-else-if="loadError" class="error-box">
-      <p>{{ loadError }}</p>
-      <button @click="loadData">다시 시도</button>
+    <div v-if="loading" class="d-flex align-center ga-2 text-medium-emphasis pt-8">
+      <v-progress-circular size="20" width="2" indeterminate />
+      불러오는 중...
     </div>
 
+    <v-alert v-else-if="loadError" type="error" variant="tonal" class="mt-8">
+      {{ loadError }}
+      <template #append>
+        <v-btn size="small" variant="text" @click="loadData">다시 시도</v-btn>
+      </template>
+    </v-alert>
+
     <div v-else>
-      <h1>{{ warehouse.name }}</h1>
-
-      <ul class="dock-list">
-        <li v-for="dock in docks" :key="dock.id">
-          <button
-            class="dock-card"
-            :class="{ selected: selectedDock?.id === dock.id }"
-            :disabled="dock.status !== 'AVAILABLE'"
-            @click="selectDock(dock)"
-          >
-            <strong>{{ dock.name }}</strong>
-            <span class="badges">
-              <span class="badge">{{ sizeLabel[dock.size] }}</span>
-              <span class="badge" :class="'status-' + dock.status">{{ statusLabel[dock.status] }}</span>
-              <span v-if="dock.hasLeveler" class="badge">레벨러</span>
-              <span v-if="dock.hasDockSeal" class="badge">도크씰</span>
-              <span v-if="dock.supportsColdChain" class="badge">냉동/냉장</span>
-              <span v-if="dock.supportsHazmat" class="badge">위험물</span>
-            </span>
-          </button>
-        </li>
-      </ul>
-
-      <form v-if="selectedDock && !assignmentResult" class="assign-form" @submit.prevent="submitAssignment">
-        <h2>{{ selectedDock.name }} 배정</h2>
-
-        <label>
-          기사 이름
-          <input v-model="form.driverName" required />
-        </label>
-
-        <label>
-          예정 시각 (선택, 미입력 시 현재 시각)
-          <input v-model="form.scheduledTime" type="datetime-local" />
-        </label>
-
-        <label>
-          PIN (4자리 숫자, 취소 시 필요)
-          <input v-model="form.pin" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" required />
-        </label>
-
-        <p v-if="assignError" class="error-text">{{ assignError }}</p>
-
-        <button type="submit" :disabled="submitting">{{ submitting ? '배정 중...' : '배정하기' }}</button>
-      </form>
-
-      <div v-if="assignmentResult" class="success-box">
-        <p>배정이 완료됐습니다. (배정 번호 {{ assignmentResult.id }})</p>
-        <p>취소가 필요하면 아래 링크에서 PIN으로 취소할 수 있습니다.</p>
-        <router-link :to="{ name: 'cancel', params: { id: assignmentResult.id } }">배정 취소하러 가기</router-link>
+      <div class="d-flex align-center justify-space-between mb-1 mt-4">
+        <h1 class="text-h5 font-weight-bold">{{ warehouse.name }}</h1>
+        <v-chip color="success" size="small" variant="tonal" prepend-icon="mdi-circle-medium">
+          실시간 모니터링 중
+        </v-chip>
       </div>
+      <p class="text-body-2 text-medium-emphasis mb-4">실시간 도크 배정 및 가동 상태 모니터링</p>
+
+      <div class="d-flex flex-column ga-3">
+        <v-card
+          v-for="dock in docks"
+          :key="dock.id"
+          rounded="lg"
+          variant="outlined"
+          :class="{ 'dock-card-selected': selectedDock?.id === dock.id }"
+          :disabled="dock.status !== 'AVAILABLE'"
+          @click="selectDock(dock)"
+        >
+          <v-card-text class="d-flex flex-column ga-2">
+            <span class="font-weight-bold">{{ dock.name }}</span>
+            <div class="d-flex flex-wrap ga-1">
+              <v-chip size="small" variant="outlined">{{ sizeLabel[dock.size] }}</v-chip>
+              <v-chip size="small" variant="tonal" :color="statusMeta[dock.status].color">
+                {{ statusMeta[dock.status].label }}
+              </v-chip>
+              <v-chip v-for="f in featureMeta.filter((f) => dock[f.key])" :key="f.key" size="small" variant="outlined">
+                {{ f.label }}
+              </v-chip>
+            </div>
+          </v-card-text>
+        </v-card>
+      </div>
+
+      <v-card v-if="selectedDock && !assignmentResult" rounded="lg" variant="flat" border class="mt-6">
+        <v-card-title class="pt-5 px-5">{{ selectedDock.name }} 배정</v-card-title>
+        <v-form @submit.prevent="submitAssignment">
+          <v-card-text class="px-5 d-flex flex-column ga-2">
+            <v-text-field v-model="form.driverName" label="기사 이름" required />
+            <v-text-field
+              v-model="form.scheduledTime"
+              label="도착 예정 시각 (선택, 미입력 시 현재 시각)"
+              type="datetime-local"
+              prepend-inner-icon="mdi-clock-outline"
+            />
+            <v-text-field
+              v-model="form.pin"
+              label="배정 PIN (4자리)"
+              inputmode="numeric"
+              pattern="[0-9]{4}"
+              maxlength="4"
+              required
+            />
+            <v-alert v-if="assignError" type="error" density="compact" variant="tonal">{{ assignError }}</v-alert>
+          </v-card-text>
+          <v-card-actions class="px-5 pb-5">
+            <v-btn block color="primary" size="large" variant="flat" type="submit" :loading="submitting">
+              도크 배정 완료
+            </v-btn>
+          </v-card-actions>
+        </v-form>
+      </v-card>
+
+      <v-card v-if="assignmentResult" rounded="lg" variant="flat" class="mt-6 pa-5 text-center success-box">
+        <v-avatar color="success" variant="tonal" size="48" class="mb-3">
+          <v-icon icon="mdi-check-circle-outline" size="28" />
+        </v-avatar>
+        <div class="text-h6 font-weight-bold mb-1">도크 배정 정상 완료</div>
+        <p class="text-body-2 mb-4">배정 번호 {{ assignmentResult.id }}</p>
+        <v-btn
+          variant="outlined"
+          color="error"
+          block
+          :to="{ name: 'cancel', params: { id: assignmentResult.id } }"
+        >
+          배정 취소하러 가기
+        </v-btn>
+      </v-card>
     </div>
   </div>
 </template>
@@ -142,116 +183,15 @@ loadData()
 .page {
   max-width: 480px;
   margin: 0 auto;
-  padding: 20px 16px 48px;
+  padding: 16px 16px 48px;
 }
 
-.dock-list {
-  list-style: none;
-  padding: 0;
-  margin: 16px 0;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.dock-card {
-  width: 100%;
-  text-align: left;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 14px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: transparent;
-  color: var(--text-h);
-}
-
-.dock-card.selected {
-  border-color: var(--accent);
-  background: var(--accent-bg);
-}
-
-.badges {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.badge {
-  font-size: 13px;
-  padding: 2px 8px;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-}
-
-.status-AVAILABLE {
-  color: var(--success);
-  border-color: var(--success);
-  background: var(--success-bg);
-}
-
-.status-OCCUPIED,
-.status-MAINTENANCE {
-  color: var(--danger);
-  border-color: var(--danger);
-  background: var(--danger-bg);
-}
-
-.assign-form {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  margin-top: 20px;
-  padding: 16px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-}
-
-.assign-form label {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  font-size: 14px;
-}
-
-.assign-form input {
-  padding: 10px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--bg);
-  color: var(--text-h);
-}
-
-.assign-form button {
-  padding: 12px;
-  border: none;
-  border-radius: 8px;
-  background: var(--accent);
-  color: #fff;
-  font-weight: 600;
-}
-
-.error-box,
-.error-text {
-  color: var(--danger);
-}
-
-.error-box {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  align-items: flex-start;
+.dock-card-selected {
+  border-color: rgb(var(--v-theme-primary)) !important;
+  background: rgba(var(--v-theme-primary), 0.06);
 }
 
 .success-box {
-  margin-top: 20px;
-  padding: 16px;
-  border-radius: 10px;
-  background: var(--success-bg);
-  color: var(--success);
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+  background: rgba(var(--v-theme-success), 0.08) !important;
 }
 </style>
