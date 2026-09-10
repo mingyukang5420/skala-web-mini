@@ -402,3 +402,44 @@ GitHub 정책상 PR 작성자와 리뷰 실행 계정이 동일하면 정식 App
 
 ### 최종 판정
 승인. `main`에 머지 완료 (squash merge, 브랜치 삭제). 문서 전용 PR이며 코드 드리프트/회귀 없음.
+
+## 2026-09-10 - PR #27: feat: 도크별 점유 현황 대시보드 및 관리자 사이드바 추가
+
+- 이슈: #26 [Feature] 도크별 실시간 점유 현황 대시보드
+- 브랜치: `feat/13-dock-occupancy-dashboard` → `main`
+- 근거 문서: `기능명세서.md`(REQ-FUNC-008 추적성), `콕배정-API.yml`(`WarehouseSummaryResponse` 스키마), `콕배정_와이어프레임.zip`의 SCR-ADMIN-003, 이슈 #26, `docs/작업계획서.md` §3-2/§6
+
+### 검토 범위
+- `WarehouseSummaryResponse`에 `docks: DockOccupancy[]`(dockId, name, status, occupied) 필드 추가, `WarehouseSummaryService.getSummary()`가 도크별 `assignmentRepository.existsByDockIdAndStatus(ACTIVE)` 결과로 `occupied`를 계산
+- `AdminSummaryView.vue`(신규, `/admin/summary`), `AdminLayout.vue`(신규, 사이드바 공통 레이아웃), 기존 5개 관리자 화면(`AdminWarehouseListView`/`AdminWarehouseFormView`/`AdminDockListView`/`AdminDockFormView`)에 `AdminLayout` 일괄 적용
+- `AdminWarehouseListView.vue`의 각 창고 행에 `{ name: 'admin-summary', query: { warehouseId: w.id } }` 링크 추가(요약 페이지 진입 시 해당 창고 사전 선택)
+
+### SCR-ADMIN-003 대조 (와이어프레임 이미지 직접 확인)
+`SCR-ADMIN-003.png`를 압축 해제해 직접 열어 확인. AI 분석 요약 박스 + 도크별 리스트(도크명/바/퍼센트/상태 배지: 사용중·사용가능·점검중) 구성이 이 PR의 `AdminSummaryView.vue`와 핵심 구조가 일치함을 확인했다. 두 가지 차이를 발견해 비차단으로 `docs/후속작업.md`에 기록:
+1. 와이어프레임은 도크별 바가 개별 이용률(%)을 표시하나, 구현은 `occupied` 여부에 따른 0%/100% 이진 바 - 현재 데이터 모델이 도크별 과거 이용률을 집계/저장하지 않아 스코프 밖.
+2. 와이어프레임 사이드바는 "창고 관리/도크 관리/혼잡도 요약" 3항목이나 구현은 2항목("도크 관리" 없음) - 도크 관리 라우트가 이 PR 이전부터 창고 종속(`/admin/warehouses/:id/docks`)이라 전역 링크를 둘 수 없는 기존 아키텍처 제약이며, 창고 행의 "도크 관리" 링크로 접근은 여전히 가능. `작업계획서.md` §6(이슈 #28)에서 와이어프레임 기준 사이드바 전면 재구성이 예정돼 있음.
+
+PR 본문이 스스로 밝힌 "삭제 확인 팝업(하드 삭제) 미반영"에 대해서도 `콕배정-API.yml`을 재확인 - `/admin/warehouses/{id}`, `/admin/docks/{id}`에 DELETE 메서드가 정의되어 있지 않고 `(de)activate`(소프트 삭제)만 존재함을 확인. PR의 판단이 API 설계와 일치함을 검증했다.
+
+### `occupied` 계산 방식이 `dock.status`와 독립적인 점 검토
+`DockOccupancy.occupied`는 `dock.status` 필드가 아니라 `AssignmentRepository.existsByDockIdAndStatus(dockId, ACTIVE)`로 별도 계산된다. 즉 관리자가 도크 상태를 수동으로 "배정 가능"으로 유지해도 실제 ACTIVE 배정이 있으면 `occupied=true`가 나온다 - PR #20/#24 리뷰에서 확정된 "도크 상태 자동 반영 없음" 설계 결정과 일치하는 올바른 구현임을 실제 데이터로 재현해 확인(아래 독립 검증의 A1 사례).
+
+### 독립 재현
+- `git worktree add`로 `feat/13-dock-occupancy-dashboard`를 별도 경로에 체크아웃(현재 작업 디렉터리의 `feat/28-admin-ui-vuetify-redesign` 체크아웃은 건드리지 않음).
+- `initdb`+`pg_ctl`로 유닉스 소켓 `/tmp` 기반 임시 Postgres(포트 5544) 기동, `SPRING_DATASOURCE_*`/`OPENAI_API_KEY=sk-dummy`/`JWT_SECRET`(랜덤) 환경변수로 `bootRun`.
+- `htpasswd -bnBC 10`으로 bcrypt 해시 생성 후 관리자 계정 SQL 직접 시딩, 이후 전부 실제 API로 시딩: 창고 2개(서울1센터/부산2센터), 서울1센터에 도크 3개(A1 AVAILABLE, A2 AVAILABLE, A3 MAINTENANCE), `POST /assignments`로 A1에 실제 ACTIVE 배정 생성.
+- curl로 `GET /admin/warehouses/1/summary` 확인: A1 `{status:AVAILABLE, occupied:true}`, A2 `{status:AVAILABLE, occupied:false}`, A3 `{status:MAINTENANCE, occupied:false}` - 도크 상태와 무관하게 실제 배정 여부가 정확히 반영됨. 도크 없는 창고(부산2센터)는 `docs:[]` 빈 배열 확인.
+- `npm run dev`(포트 5173, `VITE_API_BASE_URL=http://localhost:8080`) 기동 후 Playwright(`playwright-core`, 시스템 Chrome, headless)로 실제 브라우저 시나리오 재현:
+  1. 관리자 로그인 -> 사이드바 "혼잡도 요약" 클릭 -> `/admin/summary` 이동 확인
+  2. 드롭다운에서 서울1센터 선택 -> 도크 리스트 `[{A1, 사용중}, {A2, 사용가능}, {A3, 점검중}]` DOM에서 직접 추출해 백엔드 값과 정확히 일치함을 확인
+  3. 창고 목록의 부산2센터 행 "혼잡도 요약" 링크 클릭 -> `/admin/summary?warehouseId=2`로 이동, 드롭다운이 "부산2센터"로 자동 선택됨을 확인(사전 선택 기능 검증)
+  4. 창고 목록 -> "도크 관리" 링크, `/admin/warehouses/1/docks/new` 폼 화면 모두 사이드바가 깨지지 않고 정상 렌더링됨을 스크린샷으로 확인
+  5. `page.on('console'/'pageerror')`로 전 시나리오 콘솔/페이지 에러 0건 확인
+
+### 독립 검증 환경
+- 백엔드/프론트 프로세스 종료, 임시 Postgres `pg_ctl stop` 후 데이터 디렉터리 삭제, `git worktree remove --force`로 임시 워크트리 제거, `git status` clean 확인, 원래 브랜치(`feat/28-admin-ui-vuetify-redesign`)는 처음부터 건드리지 않음(worktree 격리로 접근하지 않았고 커밋도 하지 않음).
+
+### 최종 판정
+승인. `main`에 머지 완료 (squash merge, 브랜치 삭제).
+
+비차단 참고사항(도크별 점유 바가 이용률이 아닌 이진값 표시, 사이드바에 "도크 관리" 단독 항목 부재)은 `docs/후속작업.md`에 기록.
