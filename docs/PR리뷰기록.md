@@ -443,3 +443,44 @@ PR 본문이 스스로 밝힌 "삭제 확인 팝업(하드 삭제) 미반영"에
 승인. `main`에 머지 완료 (squash merge, 브랜치 삭제).
 
 비차단 참고사항(도크별 점유 바가 이용률이 아닌 이진값 표시, 사이드바에 "도크 관리" 단독 항목 부재)은 `docs/후속작업.md`에 기록.
+
+## 2026-09-10 - PR #30: feat: 관리자/방문 화면 UI 개선 (Vuetify 도입 + 와이어프레임/브랜드 자산 반영)
+
+- 이슈: #28 [Feature] 관리자/방문 화면 UI 개선 (Vuetify 도입 + 와이어프레임/브랜드 자산 반영)
+- 브랜치: `feat/28-admin-ui-vuetify-redesign-v2` → `main` (PR #27 머지로 base가 삭제되며 자동 closed된 #29를 대체, 커밋 내용은 동일하고 main 기준으로 재구성만 함)
+- 근거 문서: `../web-draft/콕배정_와이어프레임.zip`(SCR-ADMIN-001/002/003, SCR-AUTH-001, SCR-ASSIGN-001/002, SCR-ASSIGN-PIN-POPUP, POPUPS/POPUPS-1), `../web-draft/favicon.png`/`logo.png`, `../web-draft/기능명세서.md`, 이슈 #28, `docs/작업계획서.md` §6, `docs/후속작업.md`의 PR #23/#27 항목
+
+### 검토 범위
+- `frontend/package.json`에 `vuetify@4.2.1`/`vite-plugin-vuetify`/`@mdi/font` 추가, `main.js`에 브랜드 커스텀 테마 2종(`kokbaejeongLight`/`kokbaejeongDark`) 구성, `App.vue`를 `v-app`으로 감쌈
+- `favicon.png`/`logo.png` 반영, `favicon.svg`/`icons.svg`/`vite.svg` 스캐폴드 잔재 제거, `index.html` 타이틀을 "콕배정 관리자"로 변경
+- `AdminLayout.vue`: `v-navigation-drawer` 기반 사이드바로 재구성, 메뉴 3개(창고 관리/도크 관리/혼잡도 요약) - PR #27에서 비차단으로 기록된 "도크 관리 메뉴 누락" 해소
+- `AdminWarehouseFormView.vue`/`AdminDockFormView.vue`(라우팅 폼 페이지)와 `/new`·`/:id/edit` 라우트를 삭제하고, `WarehouseFormDialog.vue`/`DockFormDialog.vue`/`ConfirmDialog.vue`(전부 신규) 다이얼로그로 전환
+- `AdminDockListView.vue`: 창고 종속 라우트(`/admin/warehouses/:id/docks`)에서 독립 라우트(`/admin/docks`, `v-select`로 대상 창고 전환)로 변경
+- `AdminSummaryView.vue`: AI 요약 콜아웃 + 도크별 `v-progress-linear`/`v-chip` 재구성. 도크별 이진(0%/100%) 점유 표시는 PR #27에서 이미 비차단으로 기록된 사안과 동일한 이유(백엔드가 도크별 숫자 점유율을 제공하지 않음)로 변화 없음
+- `AssignView.vue`/`CancelView.vue`: SCR-ASSIGN-001/002/PIN-POPUP 기준 카드/칩/알림 재구성
+- `backend/src/main/resources/data.sql`(신규): 창고 5/도크 18/배정 5/관리자 1 시드, `ON CONFLICT DO NOTHING` + `setval`로 재기동 멱등성 확보
+
+### PR #23 후속작업 항목(비동기 초기값 로드 레이스 컨디션) 반영 여부 직접 확인
+코드로 직접 확인. `WarehouseFormDialog.vue`/`DockFormDialog.vue`는 `loadingExisting` ref를 두고, `v-text-field`/`v-select`/`v-checkbox`에 전부 `:disabled="loadingExisting"`를 걸어 비동기 초기값 로드(`loadExisting()`)가 끝나기 전까지 모든 입력 필드를 잠근다. 저장 버튼도 `:disabled="loadingExisting"`으로 동일하게 막혀 있어, PR 본문의 주장(`후속작업.md`의 PR #23 항목 해결)이 실제 코드와 일치함을 확인했다.
+
+### 와이어프레임 대조
+9개 PNG(SCR-ADMIN-001/002/003, SCR-AUTH-001, SCR-ASSIGN-001/002/PIN-POPUP, POPUPS/POPUPS-1)를 직접 압축 해제해 열어 확인. 로그인 화면(아이디/비밀번호+눈 아이콘 토글+에러 알럿), 창고/도크 관리 테이블(식별 코드/등록일자/상태 칩/관리 작업 버튼 열), 혼잡도 요약(AI 분석 요약 콜아웃 + 도크별 바/배지), 배정/취소 카드(도크 카드 리스트 → 배정 폼 → 완료 카드 → PIN 확인)가 실제 구현과 레이아웃/구성 요소 단위로 대응됨을 확인. 로그인 화면은 와이어프레임엔 없던 `logo.png` 워드마크("콕배정" 텍스트)를 favicon 아이콘과 함께 추가로 보여주는데, 이슈 #28이 명시한 `favicon.png`/`logo.png` 두 자산을 모두 반영하라는 요구와 일치하는 합리적 확장이라 판단해 비차단/문제없음으로 처리.
+
+### 독립 재현
+- 현재 체크아웃이 이미 `feat/28-admin-ui-vuetify-redesign-v2`였으므로 별도 워크트리 없이 그 자리에서 검증(작업 종료 후 `git status` clean 확인).
+- `initdb`+`pg_ctl`로 유닉스 소켓(`/tmp`) 임시 Postgres(포트 5433) 기동, `SPRING_DATASOURCE_*`/`OPENAI_API_KEY=sk-dummy`/`JWT_SECRET`(더미) 환경변수로 `./gradlew bootRun`, `VITE_API_BASE_URL=http://localhost:8080`로 `npm run dev`.
+- Playwright(시스템 Chrome, headless)로 실제 브라우저 시나리오 재현 및 스크린샷 확보:
+  1. `/admin` 진입 시 브라우저 탭 타이틀 "콕배정 관리자", `<link rel="icon">`가 `favicon.png`로 로드됨을 확인(구 Vite 스캐폴드 흔적 없음)
+  2. 오답 로그인(`admin`/`wrongpass`) → 에러 알럿 노출, 정답 로그인(`admin`/`admin1234`, `data.sql` 시드 계정) → `/admin/warehouses`로 리다이렉트
+  3. 창고 목록 테이블(시드 5개: 물류센터 A/B, 냉동창고 C, 영남 물류센터, 호남 스마트허브) 렌더링 확인, 창고 등록 다이얼로그 오픈/닫기, 기존 창고 수정 다이얼로그에서 로딩 중 필드 비활성화 → 로드 완료 후 기존값("물류센터 A")으로 채워짐을 확인
+  4. `/admin/docks`에서 창고 선택 드롭다운으로 대상 창고 전환, 도크 목록 테이블(규격/가동상태 칩/보유특성 칩) 확인, 도크 등록 다이얼로그 오픈 확인
+  5. `/admin/summary?warehouseId=1`에서 AI 분석 요약 문구("전체 활성 도크 5개 중 1개가 배정되어 점유율은 20%입니다" - OPENAI_API_KEY 더미라 폴백 문장 경로) + 도크별 바/배지(A-2만 "사용중" 파란 바, 나머지 회색) 렌더링 확인
+  6. `/w/1`(방문 기사 배정 화면) 진입 → AVAILABLE 도크(A-3) 선택 → 기사명/PIN 입력 → 배정 완료 카드(배정 번호 1006) 확인 → "배정 취소하러 가기" → PIN(1234) 입력 → "배정이 취소됐습니다" 확인
+  7. 전 시나리오에서 `page.on('console'/'pageerror')`로 콘솔 에러 0건 확인(로그인 실패 시의 401 응답 로그 1건은 의도된 정상 동작)
+- **`data.sql` 멱등성 검증**: 위 시나리오 실행 후(배정 1006을 취소 상태로 만든 채) 백엔드 프로세스를 완전히 종료하고 동일 DB에 대해 재기동. 재기동 로그에 SQL 에러/중복 삽입 없음을 확인, 재기동 후 `assignment` 테이블을 직접 조회해 시드 5건(1001~1005, ACTIVE)은 그대로이고 테스트로 취소한 1006도 `CANCELLED` 상태로 유지됨(재시딩으로 덮어써지지 않음)을 확인. 이어서 `POST /admin/warehouses`로 신규 창고를 만들어 `id=6`이 정상 발급됨을 확인해(시드 최대값 5와 충돌 없음) `setval` 처리가 실제로 동작함을 검증.
+- 검증 후 백엔드/프론트 프로세스와 임시 Postgres(`pg_ctl stop`) 모두 종료, `git status` clean 확인.
+
+### 최종 판정
+승인. `main`에 머지 완료 (squash merge, 브랜치 삭제).
+
+새로 발견된 비차단 항목 없음. PR #27에서 이미 기록된 "도크별 점유 바 이진 표시" 항목은 이번 PR에서도 동일한 이유(백엔드 API 제약)로 유지되며, "사이드바 도크 관리 메뉴 누락" 항목은 이번 PR로 해소되었다.
