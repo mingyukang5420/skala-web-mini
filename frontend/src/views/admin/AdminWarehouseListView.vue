@@ -58,11 +58,11 @@ function openEdit(warehouse) {
 }
 
 function goDocks(warehouse) {
-  router.push({ name: 'admin-docks-overview', query: { warehouseId: warehouse.id } })
+  router.push({ name: 'admin-warehouse-docks', params: { id: warehouse.id } })
 }
 
 function goSummary(warehouse) {
-  router.push({ name: 'admin-summary', query: { warehouseId: warehouse.id } })
+  router.push({ name: 'admin-warehouse-summary', params: { id: warehouse.id } })
 }
 
 function askToggle(warehouse) {
@@ -91,44 +91,50 @@ onMounted(load)
 
 <template>
   <AdminLayout>
-    <div class="d-flex justify-space-between align-start mb-6">
-      <div>
+    <div class="d-flex justify-space-between align-baseline mb-6">
+      <div class="d-flex align-baseline ga-3">
         <h1 class="text-h5 font-weight-bold">창고 관리</h1>
-        <p class="text-body-2 text-medium-emphasis mt-1">등록된 물류센터를 관리합니다</p>
+        <span class="text-body-2 text-medium-emphasis">전체 등록 창고 정보 관리</span>
       </div>
       <v-btn color="primary" variant="flat" prepend-icon="mdi-plus" @click="openCreate">창고 등록</v-btn>
     </div>
 
     <v-alert v-if="error" type="error" density="compact" variant="tonal" class="mb-4">{{ error }}</v-alert>
 
-    <v-card rounded="lg" variant="flat" border>
-      <v-data-table :headers="headers" :items="warehouses" :loading="loading" item-value="id" no-data-text="등록된 창고가 없습니다.">
-        <template #item.code="{ item }">
-          <span class="text-primary font-weight-medium">{{ code(item) }}</span>
-        </template>
-        <template #item.name="{ item }">
-          <span class="font-weight-medium">{{ item.name }}</span>
-        </template>
-        <template #item.createdAt="{ item }">
-          {{ formatDate(item.createdAt) }}
-        </template>
-        <template #item.active="{ item }">
-          <v-chip :color="item.active ? 'success' : 'error'" size="small" variant="tonal">
-            {{ item.active ? '활성' : '비활성' }}
-          </v-chip>
-        </template>
-        <template #item.actions="{ item }">
-          <div class="d-flex justify-end ga-2">
-            <v-btn size="small" variant="outlined" @click="goDocks(item)">도크 관리</v-btn>
-            <v-btn size="small" variant="outlined" @click="goSummary(item)">혼잡도 요약</v-btn>
-            <v-btn size="small" variant="outlined" @click="openEdit(item)">수정</v-btn>
-            <v-btn size="small" variant="outlined" color="error" @click="askToggle(item)">
-              {{ item.active ? '비활성화' : '활성화' }}
-            </v-btn>
-          </div>
-        </template>
-      </v-data-table>
-    </v-card>
+    <v-data-table
+      :headers="headers"
+      :items="warehouses"
+      :loading="loading"
+      item-value="id"
+      no-data-text="등록된 창고가 없습니다."
+      hide-default-footer
+      class="flat-table"
+    >
+      <template #item.code="{ item }">
+        <span class="text-primary font-weight-medium">{{ code(item) }}</span>
+      </template>
+      <template #item.name="{ item }">
+        <span class="font-weight-medium">{{ item.name }}</span>
+      </template>
+      <template #item.createdAt="{ item }">
+        {{ formatDate(item.createdAt) }}
+      </template>
+      <template #item.active="{ item }">
+        <v-chip :color="item.active ? 'success' : 'error'" size="small" variant="tonal">
+          {{ item.active ? '활성' : '비활성' }}
+        </v-chip>
+      </template>
+      <template #item.actions="{ item }">
+        <div class="d-flex justify-end ga-2">
+          <v-btn size="small" variant="outlined" @click="goDocks(item)">도크 관리</v-btn>
+          <v-btn size="small" variant="outlined" @click="goSummary(item)">혼잡도 요약</v-btn>
+          <v-btn size="small" variant="outlined" @click="openEdit(item)">수정</v-btn>
+          <v-btn size="small" variant="outlined" color="error" @click="askToggle(item)">
+            {{ item.active ? '비활성화' : '활성화' }}
+          </v-btn>
+        </div>
+      </template>
+    </v-data-table>
 
     <WarehouseFormDialog v-model="formOpen" :warehouse-id="editingId" @saved="load" />
 
@@ -143,3 +149,18 @@ onMounted(load)
     />
   </AdminLayout>
 </template>
+
+<style scoped>
+.flat-table :deep(table) {
+  border-collapse: collapse;
+}
+
+.flat-table :deep(th) {
+  font-weight: 600 !important;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.12) !important;
+}
+
+.flat-table :deep(td) {
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06) !important;
+}
+</style>
