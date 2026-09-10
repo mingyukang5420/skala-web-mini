@@ -3,9 +3,7 @@ import AssignView from '../views/AssignView.vue'
 import CancelView from '../views/CancelView.vue'
 import AdminLoginView from '../views/admin/AdminLoginView.vue'
 import AdminWarehouseListView from '../views/admin/AdminWarehouseListView.vue'
-import AdminWarehouseFormView from '../views/admin/AdminWarehouseFormView.vue'
 import AdminDockListView from '../views/admin/AdminDockListView.vue'
-import AdminDockFormView from '../views/admin/AdminDockFormView.vue'
 import AdminSummaryView from '../views/admin/AdminSummaryView.vue'
 import { isLoggedIn } from '../api/adminClient'
 
@@ -22,33 +20,9 @@ const router = createRouter({
       meta: { requiresAuth: true },
     },
     {
-      path: '/admin/warehouses/new',
-      name: 'admin-warehouse-new',
-      component: AdminWarehouseFormView,
-      meta: { requiresAuth: true },
-    },
-    {
-      path: '/admin/warehouses/:id/edit',
-      name: 'admin-warehouse-edit',
-      component: AdminWarehouseFormView,
-      meta: { requiresAuth: true },
-    },
-    {
-      path: '/admin/warehouses/:id/docks',
-      name: 'admin-docks',
+      path: '/admin/docks',
+      name: 'admin-docks-overview',
       component: AdminDockListView,
-      meta: { requiresAuth: true },
-    },
-    {
-      path: '/admin/warehouses/:id/docks/new',
-      name: 'admin-dock-new',
-      component: AdminDockFormView,
-      meta: { requiresAuth: true },
-    },
-    {
-      path: '/admin/docks/:id/edit',
-      name: 'admin-dock-edit',
-      component: AdminDockFormView,
       meta: { requiresAuth: true },
     },
     {
