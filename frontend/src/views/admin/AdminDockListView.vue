@@ -1,13 +1,14 @@
 <script setup>
 import { ref, onMounted } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRoute } from 'vue-router'
 import { adminFetch } from '../../api/adminClient'
 import AdminLayout from './AdminLayout.vue'
+import AdminWarehouseDetailLayout from './AdminWarehouseDetailLayout.vue'
 import DockFormDialog from './DockFormDialog.vue'
 import ConfirmDialog from './ConfirmDialog.vue'
 
 const route = useRoute()
-const router = useRouter()
+const warehouseId = route.params.id
 
 const sizeLabel = { LARGE: '대형', MEDIUM: '중형', SMALL: '소형' }
 const statusMeta = {
@@ -31,10 +32,8 @@ const headers = [
   { title: '관리 작업', key: 'actions', sortable: false, align: 'end' },
 ]
 
-const warehouses = ref([])
-const selectedWarehouseId = ref(null)
 const docks = ref([])
-const loading = ref(false)
+const loading = ref(true)
 const error = ref('')
 
 const formOpen = ref(false)
@@ -43,32 +42,16 @@ const confirmOpen = ref(false)
 const confirmTarget = ref(null)
 const confirmLoading = ref(false)
 
-async function loadWarehouses() {
-  warehouses.value = await adminFetch('/admin/warehouses')
-  const preselected = Number(route.query.warehouseId)
-  const initial = warehouses.value.find((w) => w.id === preselected) ?? warehouses.value[0]
-  if (initial) {
-    selectedWarehouseId.value = initial.id
-    await loadDocks()
-  }
-}
-
 async function loadDocks() {
-  if (!selectedWarehouseId.value) return
   loading.value = true
   error.value = ''
   try {
-    docks.value = await adminFetch(`/admin/docks?warehouseId=${selectedWarehouseId.value}`)
+    docks.value = await adminFetch(`/admin/docks?warehouseId=${warehouseId}`)
   } catch (err) {
     error.value = err.message || '목록을 불러오지 못했습니다.'
   } finally {
     loading.value = false
   }
-}
-
-function onWarehouseChange() {
-  router.replace({ name: 'admin-docks-overview', query: { warehouseId: selectedWarehouseId.value } })
-  loadDocks()
 }
 
 function openCreate() {
@@ -102,36 +85,28 @@ async function confirmToggle() {
   }
 }
 
-onMounted(loadWarehouses)
+onMounted(loadDocks)
 </script>
 
 <template>
   <AdminLayout>
-    <div class="d-flex flex-wrap justify-space-between align-start mb-6 ga-4">
-      <div>
-        <h1 class="text-h5 font-weight-bold">도크 관리</h1>
-        <p class="text-body-2 text-medium-emphasis mt-1">창고별 도크 현황을 관리합니다</p>
+    <AdminWarehouseDetailLayout :warehouse-id="warehouseId">
+      <div class="d-flex justify-space-between align-baseline mb-4">
+        <span class="text-body-2 text-medium-emphasis">이 창고에 등록된 도크 현황을 관리합니다</span>
+        <v-btn color="primary" variant="flat" prepend-icon="mdi-plus" @click="openCreate">도크 등록</v-btn>
       </div>
-      <v-btn color="primary" variant="flat" prepend-icon="mdi-plus" :disabled="!selectedWarehouseId" @click="openCreate">
-        도크 등록
-      </v-btn>
-    </div>
 
-    <v-select
-      v-model="selectedWarehouseId"
-      :items="warehouses"
-      item-title="name"
-      item-value="id"
-      label="대상 창고"
-      max-width="280"
-      class="mb-4"
-      @update:model-value="onWarehouseChange"
-    />
+      <v-alert v-if="error" type="error" density="compact" variant="tonal" class="mb-4">{{ error }}</v-alert>
 
-    <v-alert v-if="error" type="error" density="compact" variant="tonal" class="mb-4">{{ error }}</v-alert>
-
-    <v-card rounded="lg" variant="flat" border>
-      <v-data-table :headers="headers" :items="docks" :loading="loading" item-value="id" no-data-text="등록된 도크가 없습니다.">
+      <v-data-table
+        :headers="headers"
+        :items="docks"
+        :loading="loading"
+        item-value="id"
+        no-data-text="등록된 도크가 없습니다."
+        hide-default-footer
+        class="flat-table"
+      >
         <template #item.name="{ item }">
           <span class="font-weight-medium">{{ item.name }}</span>
         </template>
@@ -168,23 +143,33 @@ onMounted(loadWarehouses)
           </div>
         </template>
       </v-data-table>
-    </v-card>
 
-    <DockFormDialog
-      v-model="formOpen"
-      :dock-id="editingId"
-      :warehouse-id="selectedWarehouseId"
-      @saved="loadDocks"
-    />
+      <DockFormDialog v-model="formOpen" :dock-id="editingId" :warehouse-id="warehouseId" @saved="loadDocks" />
 
-    <ConfirmDialog
-      v-model="confirmOpen"
-      title="도크 상태 변경"
-      :message="confirmTarget?.active ? `'${confirmTarget?.name}' 도크를 비활성화하시겠습니까?` : `'${confirmTarget?.name}' 도크를 다시 활성화하시겠습니까?`"
-      :confirm-label="confirmTarget?.active ? '비활성화' : '활성화'"
-      :confirm-color="confirmTarget?.active ? 'error' : 'primary'"
-      :loading="confirmLoading"
-      @confirm="confirmToggle"
-    />
+      <ConfirmDialog
+        v-model="confirmOpen"
+        title="도크 상태 변경"
+        :message="confirmTarget?.active ? `'${confirmTarget?.name}' 도크를 비활성화하시겠습니까?` : `'${confirmTarget?.name}' 도크를 다시 활성화하시겠습니까?`"
+        :confirm-label="confirmTarget?.active ? '비활성화' : '활성화'"
+        :confirm-color="confirmTarget?.active ? 'error' : 'primary'"
+        :loading="confirmLoading"
+        @confirm="confirmToggle"
+      />
+    </AdminWarehouseDetailLayout>
   </AdminLayout>
 </template>
+
+<style scoped>
+.flat-table :deep(table) {
+  border-collapse: collapse;
+}
+
+.flat-table :deep(th) {
+  font-weight: 600 !important;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.12) !important;
+}
+
+.flat-table :deep(td) {
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06) !important;
+}
+</style>
