@@ -4,11 +4,7 @@ import { clearToken } from '../../api/adminClient'
 
 const router = useRouter()
 
-const navItems = [
-  { to: { name: 'admin-warehouses' }, label: '창고 관리', icon: 'mdi-warehouse' },
-  { to: { name: 'admin-docks-overview' }, label: '도크 관리', icon: 'mdi-truck-delivery-outline' },
-  { to: { name: 'admin-summary' }, label: '혼잡도 요약', icon: 'mdi-chart-bar' },
-]
+const navItems = [{ to: { name: 'admin-warehouses' }, label: '창고 관리', icon: 'mdi-warehouse' }]
 
 function logout() {
   clearToken()
@@ -17,7 +13,7 @@ function logout() {
 </script>
 
 <template>
-  <v-navigation-drawer permanent theme="kokbaejeongDark" width="220" color="primary">
+  <v-navigation-drawer permanent theme="dark" width="220" class="admin-sidebar">
     <div class="admin-brand">
       <v-avatar size="32" rounded="lg">
         <v-img src="/favicon.png" alt="콕배정" />
@@ -25,7 +21,7 @@ function logout() {
       <span class="admin-brand-text">콕배정 관리자</span>
     </div>
 
-    <v-list nav density="comfortable" class="admin-nav">
+    <v-list nav density="comfortable" class="admin-nav" bg-color="transparent">
       <v-list-item
         v-for="item in navItems"
         :key="item.label"
@@ -33,6 +29,7 @@ function logout() {
         :prepend-icon="item.icon"
         :title="item.label"
         rounded="lg"
+        class="admin-nav-item"
       />
     </v-list>
 
@@ -51,6 +48,10 @@ function logout() {
 </template>
 
 <style scoped>
+.admin-sidebar {
+  background: #0f172a !important;
+}
+
 .admin-brand {
   display: flex;
   align-items: center;
@@ -66,6 +67,19 @@ function logout() {
 
 .admin-nav {
   padding: 4px 8px;
+}
+
+.admin-nav-item {
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.admin-nav-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.admin-nav-item.v-list-item--active {
+  background: rgba(255, 255, 255, 0.12) !important;
+  color: #fff;
 }
 
 .admin-content {
